@@ -16,6 +16,7 @@ Built with [Tauri 2](https://tauri.app) (Rust) and [Svelte](https://svelte.dev),
 - **Safe writing**: each photo is written to a temporary copy, checked, and only then swapped in. Camera data (make, model, orientation) is kept, and the date taken is only changed if you set one. The EXIF *Modified* stamp is set to the time of the change. The file's modified date is kept by default. Tick *Update file modified date* to change it, so OneDrive and other sync tools upload the tagged photos.
 - **Optional backups**: originals are copied first into a backup folder that mirrors their full path.
 - **Optional CSV log**: errors and warnings (skipped files, backup notices) go to a timestamped log file.
+- **⚙ Settings**: contact email, Nominatim server, search language, results per search, clear the search cache.
 - **Remembers** the last mode, the photo, backup and log folders, and the map position.
 
 | Format | Read GPS | Write GPS |

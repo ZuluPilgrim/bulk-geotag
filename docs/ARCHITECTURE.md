@@ -63,7 +63,7 @@ bulk-geotag/
         ├── scan.rs              ← folder walk (or single file) + "has GPS / date?" detection
         ├── inspect.rs           ← single-file mode: current GPS, date, camera, preview
         ├── geocode.rs           ← Nominatim client: rate limit, cache, User-Agent
-        ├── settings.rs          ← settings.json (server URL, contact email)
+        ├── settings.rs          ← settings.json (server URL, contact email, language, results) + validation
         ├── apply.rs             ← Preview / Apply: backups, safe write, verify
         └── log.rs               ← CSV log writer
 ```
@@ -76,7 +76,9 @@ bulk-geotag/
 | `geocode` | `query` | `Candidate[]` | Re-reads `settings.json` each call. Cached. Rate-limited. |
 | `apply_gps` | `request: ApplyRequest` | `ApplyResult` | `dryRun: true` = Preview. Emits `apply-progress`. `root` may be a folder or one file. |
 | `inspect_photo` | `path` | `PhotoDetails` | Single-file mode. Read-only. Runs on a blocking thread. |
-| `settings_location` | none | path string | Creates settings.json if missing. Not used by the UI yet. |
+| `get_settings` | none | `SettingsView` | For the ⚙ dialog: settings, settings.json path, cache size, default server. Creates the file if missing. |
+| `save_settings` | `settings` | `Settings` | Validates and tidies (URL scheme, language codes, 1–10 results), writes settings.json, returns what was saved. |
+| `clear_search_cache` | none | number removed | Empties the geocode cache in memory and on disk. |
 
 **Event:** `apply-progress` with payload `[done, total]`, emitted once per photo during Preview and Apply.
 
@@ -111,11 +113,11 @@ Built around the [Nominatim usage policy](https://operations.osmfoundation.org/p
 | Max 1 request/second (app-wide) | `reserve_slot()` spaces requests ≥ 1.1 s apart, queuing if needed |
 | No autocomplete | UI calls `geocode` only on Enter or Find |
 | Cache results | JSON cache in the app cache folder, keyed by server + language + limit + normalised query |
-| Server switchable without an update | `nominatim_url` in `settings.json` |
+| Server switchable without an update | `nominatim_url` in `settings.json`, editable in ⚙ Settings |
 
 Requests: `GET {url}/search?q=…&format=jsonv2&limit=5&accept-language=en`, using `reqwest` with rustls (no system OpenSSL needed). HTTP 403 and 429 are turned into readable messages.
 
-`settings.json` lives in Tauri's `app_config_dir()`. It is created with defaults on first use and re-read on every search.
+`settings.json` lives in Tauri's `app_config_dir()`. It is created with defaults on first use and re-read on every search. Fields: `nominatim_url`, `contact_email`, `language` (Nominatim `accept-language`, comma-separated codes, default `en`), `max_results` (1–10, default 5). `#[serde(default)]` fills fields missing from older files. Language and result count are part of the cache key.
 
 ### `apply.rs`: Preview and Apply
 `run(request, progress)`:
@@ -171,6 +173,7 @@ on any failure: delete temp, original untouched
 - **Update file modified date** (`updateModified`) defaults to `false` in the UI and is not remembered. On the Rust side it is `#[serde(default)]`, so false when omitted.
 - **Dialogs:** `@tauri-apps/plugin-dialog`, with `open({directory:true})` for folders and `ask()` for the Apply confirmation.
 - **Mode:** `mode` is `"bulk" | "single"`; `root` is the folder or the file. In single mode, `inspect_photo` fills `details`, pre-fills lat/lon and date, and `atCurrent` (pin within 1e-5° of the photo's GPS) drives the pin colour: grey `at-current` while there, red once moved, plus a non-interactive grey `currentMarker` at the photo's GPS.
+- **Settings dialog:** ⚙ button (`.gear`) opens a modal; `get_settings` fills a `draft`, Save calls `save_settings` and shows Rust's validation message on failure. *Show in folder* uses `revealItemInDir` from `@tauri-apps/plugin-opener` (allowed by `opener:default`).
 - **Remembered settings:** `localStorage` key `bulk-geotag.settings.v1` holds the mode, folder, backup on/off, backup folder, log folder and map centre/zoom. Every access is wrapped in try/catch.
 
 ## Dependencies
@@ -192,7 +195,7 @@ on any failure: delete temp, original untouched
 
 ```bash
 npm run check                       # svelte-check + TypeScript
-cd src-tauri && cargo test --lib    # 10 unit tests
+cd src-tauri && cargo test --lib    # 15 unit tests
 ```
 
 | Test | Covers |
@@ -207,6 +210,11 @@ cd src-tauri && cargo test --lib    # 10 unit tests
 | `geocode::user_agent_includes_email_when_set` | User-Agent format |
 | `geocode::rate_limit_spaces_requests` | ≥ 1 s spacing, queuing |
 | `log::escapes_csv` | CSV quoting |
+| `settings::language_codes` | Language code tidy-up and rejection |
+| `settings::validation` | URL scheme, results range, blank server → default |
+| `settings::old_files_get_new_defaults` | v1.1 settings.json still loads |
+| `geocode::cache_key_includes_language_and_limit` | Changing language/limit doesn't reuse old results |
+| `geocode::clear_cache_empties_it` | Clear cache removes memory and file |
 
 **Manual check** after changing write code: run Apply on a folder of copies, then compare with ExifTool:
 
@@ -230,5 +238,4 @@ ls -la --time-style=+'%F %T'
 - HEIC/HEIF: little_exif supports it; it needs testing and adding to the extension lists.
 - Altitude and direction tags.
 - Date taken: shift by an offset, or a time-zone tag (OffsetTimeOriginal).
-- A settings screen in the UI for `settings.json`.
 - Packaging and release builds for Linux (`.deb`, AppImage), Windows and macOS.

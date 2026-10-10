@@ -3,6 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { open, ask } from "@tauri-apps/plugin-dialog";
   import { listen } from "@tauri-apps/api/event";
+  import { revealItemInDir } from "@tauri-apps/plugin-opener";
   import "leaflet/dist/leaflet.css";
   import type { Map as LMap, Marker } from "leaflet";
 
@@ -539,14 +540,75 @@
     if (ok) runApply(false);
   }
 
+  // ---------- ⚙ Settings dialog ----------
+  type AppSettings = { nominatim_url: string; contact_email: string; language: string; max_results: number };
+  type SettingsView = { settings: AppSettings; path: string; cache_entries: number; default_nominatim_url: string };
+
+  let settingsOpen = $state(false);
+  let sv = $state<SettingsView | null>(null); // what's saved
+  let draft = $state<AppSettings>({ nominatim_url: "", contact_email: "", language: "en", max_results: 5 });
+  let settingsError = $state("");
+  let settingsNote = $state("");
+  // Soft check only: an email is optional, and Nominatim does its own validation.
+  let emailLooksWrong = $derived(draft.contact_email.trim() !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.contact_email.trim()));
+
+  /** Open the Settings dialog with the values currently saved in settings.json. */
+  async function openSettings() {
+    settingsError = "";
+    settingsNote = "";
+    try {
+      sv = await invoke<SettingsView>("get_settings");
+      draft = { ...sv.settings };
+      settingsOpen = true;
+    } catch (e) {
+      status = `Could not load settings: ${e}`;
+    }
+  }
+
+  /** Save the dialog's values (Rust validates and tidies them) and close. */
+  async function saveSettings() {
+    settingsError = "";
+    try {
+      const saved = await invoke<AppSettings>("save_settings", {
+        settings: { ...draft, max_results: Number(draft.max_results) },
+      });
+      draft = { ...saved };
+      settingsOpen = false;
+      status = "Settings saved.";
+    } catch (e) {
+      settingsError = String(e);
+    }
+  }
+
+  /** Empty the place-search cache, so the next searches go to the server again. */
+  async function clearCache() {
+    settingsError = "";
+    const removed = await invoke<number>("clear_search_cache");
+    if (sv) sv.cache_entries = 0;
+    settingsNote = `Cleared ${removed} cached search${removed === 1 ? "" : "es"}.`;
+  }
+
+  /** Show settings.json in the system file manager. */
+  async function showSettingsFile() {
+    if (!sv) return;
+    try {
+      await revealItemInDir(sv.path);
+    } catch (e) {
+      settingsError = `Could not open the folder: ${e}`;
+    }
+  }
+
   /** Last part of a path (works with / and \\ separators). */
   function fileName(path: string) {
     return path.split(/[\\/]/).pop() ?? path;
   }
 </script>
 
+<svelte:window onkeydown={(e) => e.key === "Escape" && settingsOpen && (settingsOpen = false)} />
+
 <div class="app">
   <aside class="panel">
+    <button type="button" class="gear" onclick={openSettings} title="Settings" aria-label="Settings">⚙</button>
     <section>
       <h2>Photos</h2>
       <div class="modes">
@@ -723,6 +785,59 @@
     {/if}
   </div>
 
+  {#if settingsOpen && sv}
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <div class="modal-backdrop" onclick={() => (settingsOpen = false)}>
+      <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+      <div class="modal" role="dialog" aria-label="Settings" tabindex="-1" onclick={(e) => e.stopPropagation()}>
+        <header><strong>Settings</strong></header>
+
+        <label class="field-label" for="s-email">Contact email (sent to Nominatim with each search)</label>
+        <input id="s-email" type="text" bind:value={draft.contact_email} placeholder="you@example.com" />
+        {#if emailLooksWrong}<p class="hint warn">That doesn't look like an email address.</p>{/if}
+
+        <label class="field-label" for="s-url">Nominatim server</label>
+        <div class="row">
+          <input id="s-url" type="text" bind:value={draft.nominatim_url} />
+          <button type="button" onclick={() => (draft.nominatim_url = sv!.default_nominatim_url)} title={sv.default_nominatim_url}>Reset</button>
+        </div>
+
+        <div class="two-col">
+          <div>
+            <label class="field-label" for="s-lang">Search language</label>
+            <input id="s-lang" type="text" bind:value={draft.language} placeholder="en" />
+            <p class="hint">Codes like en, af, mi or en,mi</p>
+          </div>
+          <div>
+            <label class="field-label" for="s-max">Results per search</label>
+            <input id="s-max" type="number" min="1" max="10" bind:value={draft.max_results} />
+            <p class="hint">1–10</p>
+          </div>
+        </div>
+
+        <label class="field-label" for="s-cache">Search cache</label>
+        <div class="row" id="s-cache">
+          <span class="meta grow">{sv.cache_entries} cached search{sv.cache_entries === 1 ? "" : "es"}</span>
+          <button type="button" onclick={clearCache} disabled={sv.cache_entries === 0}>Clear cache</button>
+        </div>
+
+        <label class="field-label" for="s-file">Settings file</label>
+        <div class="row" id="s-file">
+          <span class="meta grow path" title={sv.path}>{sv.path}</span>
+          <button type="button" onclick={showSettingsFile}>Show in folder</button>
+        </div>
+
+        {#if settingsNote}<p class="hint">{settingsNote}</p>{/if}
+        {#if settingsError}<p class="hint error-text">{settingsError}</p>{/if}
+
+        <div class="actions modal-actions">
+          <button type="button" onclick={() => (settingsOpen = false)}>Cancel</button>
+          <button type="button" class="primary" onclick={saveSettings}>Save</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <footer class="status">
     {#if progress}
       <progress max={progress[1] || 1} value={progress[0]}></progress>
@@ -773,10 +888,84 @@
     height: 100vh;
   }
   .panel {
+    position: relative;
     background: var(--panel);
     border-right: 1px solid var(--border);
     overflow-y: auto;
     padding: 4px 16px 16px;
+  }
+  .gear {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    padding: 2px 7px;
+    font-size: 16px;
+    line-height: 1.2;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+  }
+  .gear:hover {
+    color: var(--text);
+    background: color-mix(in srgb, var(--muted) 15%, transparent);
+  }
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2000; /* above the map and the results panel */
+    background: rgba(0, 0, 0, 0.35);
+    display: grid;
+    place-items: center;
+  }
+  .modal {
+    width: min(460px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  }
+  .modal header {
+    margin-bottom: 6px;
+    font-size: 15px;
+  }
+  .modal input[type="text"],
+  .modal input[type="number"] {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .modal .row input {
+    width: auto;
+  }
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .grow {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    align-self: center;
+  }
+  .path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .error-text {
+    color: #dc2626;
+  }
+  .modal-actions {
+    margin-top: 14px;
+    justify-content: flex-end;
+  }
+  .modal-actions button {
+    flex: 0 0 auto;
+    min-width: 90px;
   }
   section {
     padding: 12px 0;

@@ -11,7 +11,7 @@ Bulk GeoTag adds a GPS location and/or a date taken to every photo in a folder. 
 4. [Reading the results](#reading-the-results)
 5. [The log file](#the-log-file)
 6. [Backups and restoring a photo](#backups-and-restoring-a-photo)
-7. [Settings file and place search](#settings-file-and-place-search)
+7. [Settings and place search](#settings-and-place-search)
 8. [What gets remembered](#what-gets-remembered)
 9. [Troubleshooting](#troubleshooting)
 10. [Limitations](#limitations)
@@ -22,7 +22,7 @@ Bulk GeoTag adds a GPS location and/or a date taken to every photo in a folder. 
 
 ```
 ┌─────────────────────────┬─────────────────────────────────────┐
-│ PHOTOS                  │                                     │
+│ PHOTOS               ⚙  │                                     │
 │  ◉ Bulk  ○ Single file  │                                     │
 │  Folder  [ … ][Browse…] │                                     │
 │  ☐ Include subfolders   │                                     │
@@ -206,9 +206,22 @@ rsync -a "/media/backup/home/fred/Photos/2024/" "/home/fred/Photos/2024/"
 
 ---
 
-## Settings file and place search
+## Settings and place search
 
-Place search uses OpenStreetMap's free **Nominatim** service. Its settings are kept in a small file that is created the first time you search:
+Place search uses OpenStreetMap's free **Nominatim** service. Click the **⚙** button at the top-right of the left panel to open **Settings**:
+
+| Setting | What it does |
+|---|---|
+| **Contact email** | Sent with each search so Nominatim's operators can contact you rather than block the app. Optional but recommended. It isn't sent anywhere else. The box warns if the value doesn't look like an email address. |
+| **Nominatim server** | Use a different Nominatim server, such as a self-hosted one. **Reset** puts back `https://nominatim.openstreetmap.org`. |
+| **Search language** | Language for place names, as codes: `en`, `af`, `mi`, `de`… Several can be listed in order of preference, e.g. `en,mi`. Blank means `en`. |
+| **Results per search** | How many matches a search shows, 1–10 (default 5). |
+| **Clear cache** | Searches are cached, so repeating one is instant and doesn't contact the server. Clearing the cache makes the next searches fetch fresh results. |
+| **Show in folder** | Opens the folder holding `settings.json` in your file manager. |
+
+**Save** checks the values (for example, the server must start with `https://`) and shows a message if something needs fixing. **Cancel** or **Esc** closes without saving. Changes apply to the next search with no restart needed.
+
+The settings are kept in a small file, which you can also edit by hand:
 
 | System | Location |
 |---|---|
@@ -219,20 +232,13 @@ Place search uses OpenStreetMap's free **Nominatim** service. Its settings are k
 ```json
 {
   "nominatim_url": "https://nominatim.openstreetmap.org",
-  "contact_email": ""
+  "contact_email": "",
+  "language": "en",
+  "max_results": 5
 }
 ```
 
-- **`contact_email`**: put your email here. It is sent with each search so Nominatim's operators can contact you rather than block the app. It never leaves your computer otherwise.
-- **`nominatim_url`**: change this to use a different Nominatim server, such as a self-hosted one.
-- Changes take effect on the next search. There's no need to restart.
-
-To follow Nominatim's rules, searches happen only when you press Enter or Find, at most one per second. Results are **cached**, so repeating a search is instant and doesn't contact the server. The cache is stored in:
-
-- Linux: `~/.cache/com.zulupilgrim.bulkgeotag/geocode-cache.json`
-- Windows: `%LOCALAPPDATA%\com.zulupilgrim.bulkgeotag\geocode-cache.json`
-
-It is safe to delete.
+To follow Nominatim's rules, searches happen only when you press Enter or Find, at most one per second. The cache lives in `~/.cache/com.zulupilgrim.bulkgeotag/geocode-cache.json` on Linux (`%LOCALAPPDATA%\com.zulupilgrim.bulkgeotag\` on Windows) and is safe to delete.
 
 ---
 
@@ -257,7 +263,7 @@ Between launches the app remembers:
 | **Apply stays faded** | It needs a folder, a location and/or a date taken, at least one photo to write, and a backup folder if backup is ticked. A scan might also still be running. |
 | **"Nothing to write"** | Neither a location nor a date taken is set. |
 | **"The backup folder is inside the photo folder"** | Select a backup folder outside the photo folder. Otherwise backups would be scanned and tagged next time. |
-| **Search failed: … 403** | Nominatim refused the request. Check `contact_email` in settings.json for typos, or try again later. |
+| **Search failed: … 403** | Nominatim refused the request. Check the contact email in **⚙ Settings** for typos, or try again later. |
 | **Search failed: … 429** | Too many requests. Wait a minute. |
 | **Search failed: could not reach …** | No internet connection, or `nominatim_url` is wrong. |
 | **No places found** | Add a country or region (*Milford Sound, New Zealand*), or click the map instead. |

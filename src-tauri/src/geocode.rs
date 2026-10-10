@@ -14,8 +14,6 @@ use std::time::{Duration, Instant};
 
 const APP_ID: &str = concat!("bulk-geotag/", env!("CARGO_PKG_VERSION"));
 const REPO_URL: &str = "https://github.com/ZuluPilgrim/bulk-geotag";
-const MAX_RESULTS: &str = "5";
-const LANGUAGE: &str = "en";
 const MIN_INTERVAL: Duration = Duration::from_millis(1100); // a little over 1 s, to stay safely under the limit
 
 /// One search result, as shown in the UI list and on the map.
@@ -68,10 +66,32 @@ impl Geocoder {
     }
 
     /// Cache key: server + language + limit + query (lower-cased, whitespace collapsed),
-    /// so "Rome  ITALY" and "rome italy" share one entry and a server change never reuses old results.
+    /// so "Rome  ITALY" and "rome italy" share one entry, and changing the server, language or
+    /// result count in Settings never reuses old results.
     fn cache_key(settings: &Settings, query: &str) -> String {
         let q = query.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
-        format!("{}|{LANGUAGE}|{MAX_RESULTS}|{q}", settings.nominatim_url.trim_end_matches('/'))
+        format!(
+            "{}|{}|{}|{q}",
+            settings.nominatim_url.trim_end_matches('/'),
+            settings.language,
+            settings.max_results
+        )
+    }
+
+    /// Number of searches in the cache (for the Settings dialog).
+    pub fn cache_len(&self) -> usize {
+        self.with_cache(|m| m.len())
+    }
+
+    /// Empty the cache in memory and on disk. Returns how many searches were removed.
+    pub fn clear_cache(&self) -> usize {
+        let removed = self.with_cache(|m| {
+            let n = m.len();
+            m.clear();
+            n
+        });
+        let _ = fs::remove_file(&self.cache_path);
+        removed
     }
 
     /// Run `f` on the cache, loading it from disk the first time. A missing or broken file means an empty cache.
@@ -128,8 +148,8 @@ impl Geocoder {
         let mut params = vec![
             ("q", query.to_string()),
             ("format", "jsonv2".to_string()),
-            ("limit", MAX_RESULTS.to_string()),
-            ("accept-language", LANGUAGE.to_string()),
+            ("limit", settings.max_results.clamp(1, 10).to_string()),
+            ("accept-language", settings.language.clone()),
         ];
         let email = settings.contact_email.trim();
         if !email.is_empty() {
@@ -148,7 +168,7 @@ impl Geocoder {
         let status = response.status();
         if !status.is_success() {
             return Err(match status.as_u16() {
-                403 => "Nominatim refused the request (403). Check contact_email in settings.json, or try again later.".into(),
+                403 => "Nominatim refused the request (403). Check the contact email in ⚙ Settings, or try again later.".into(),
                 429 => "Nominatim says too many requests (429). Wait a minute and try again.".into(),
                 code => format!("Nominatim returned HTTP {code}"),
             });
@@ -199,6 +219,28 @@ mod tests {
     fn cache_key_normalises_query() {
         let s = Settings::default();
         assert_eq!(Geocoder::cache_key(&s, "  Rome   ITALY "), Geocoder::cache_key(&s, "rome italy"));
+    }
+
+    #[test]
+    fn cache_key_includes_language_and_limit() {
+        let a = Settings::default();
+        let b = Settings { language: "af".into(), ..Default::default() };
+        let c = Settings { max_results: 3, ..Default::default() };
+        let k = |s: &Settings| Geocoder::cache_key(s, "rome");
+        assert_ne!(k(&a), k(&b));
+        assert_ne!(k(&a), k(&c));
+    }
+
+    #[test]
+    fn clear_cache_empties_it() {
+        let path = std::env::temp_dir().join(format!("bg-cache-{}.json", std::process::id()));
+        let g = Geocoder::new(path.clone());
+        g.with_cache(|m| m.insert("k".into(), vec![]));
+        g.save_cache();
+        assert_eq!(g.cache_len(), 1);
+        assert_eq!(g.clear_cache(), 1);
+        assert_eq!(g.cache_len(), 0);
+        assert!(!path.exists());
     }
 
     #[test]

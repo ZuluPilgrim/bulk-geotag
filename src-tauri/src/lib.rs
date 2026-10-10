@@ -47,11 +47,38 @@ async fn inspect_photo(path: String) -> Result<inspect::PhotoDetails, String> {
         .map_err(|e| format!("inspect task failed: {e}"))?
 }
 
-/// Where settings.json lives, so the UI can tell the user.
+/// Everything the ⚙ Settings dialog shows.
+#[derive(serde::Serialize)]
+struct SettingsView {
+    settings: settings::Settings,
+    /// Full path of settings.json (for "Open settings folder").
+    path: String,
+    /// Number of cached searches.
+    cache_entries: usize,
+    default_nominatim_url: &'static str,
+}
+
+/// Current settings for the Settings dialog (creates settings.json if missing).
 #[tauri::command]
-fn settings_location(app: tauri::AppHandle) -> Result<String, String> {
-    settings::load(&app)?; // make sure the file exists
-    Ok(settings::settings_path(&app)?.display().to_string())
+fn get_settings(app: tauri::AppHandle, geocoder: tauri::State<'_, geocode::Geocoder>) -> Result<SettingsView, String> {
+    Ok(SettingsView {
+        settings: settings::load(&app)?,
+        path: settings::settings_path(&app)?.display().to_string(),
+        cache_entries: geocoder.cache_len(),
+        default_nominatim_url: settings::DEFAULT_NOMINATIM_URL,
+    })
+}
+
+/// Validate and save settings from the dialog. Returns the saved (cleaned-up) values.
+#[tauri::command]
+fn save_settings(app: tauri::AppHandle, settings: settings::Settings) -> Result<settings::Settings, String> {
+    settings::save(&app, settings)
+}
+
+/// Empty the place-search cache. Returns how many searches were removed.
+#[tauri::command]
+fn clear_search_cache(geocoder: tauri::State<'_, geocode::Geocoder>) -> usize {
+    geocoder.clear_cache()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -64,7 +91,15 @@ pub fn run() {
             app.manage(geocode::Geocoder::new(cache_dir.join("geocode-cache.json")));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![scan_folder, geocode, apply_gps, inspect_photo, settings_location])
+        .invoke_handler(tauri::generate_handler![
+            scan_folder,
+            geocode,
+            apply_gps,
+            inspect_photo,
+            get_settings,
+            save_settings,
+            clear_search_cache
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

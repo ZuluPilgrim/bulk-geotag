@@ -3,6 +3,17 @@
 All notable changes to Bulk GeoTag. Dates are NZ local time.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-10-10
+
+### Added
+- **⚙ Settings** dialog (top-right of the left panel): contact email (with a format warning), Nominatim server with *Reset*, search language codes, results per search (1–10), *Clear cache* with a count, and *Show in folder* for settings.json. Esc or Cancel closes without saving.
+- `language` and `max_results` in settings.json (defaults `en` and 5); older settings files load unchanged.
+- Settings are validated before saving.
+
+### Changed
+- Search language and result count come from settings instead of being fixed; both are part of the search cache key.
+- 403 message now points to ⚙ Settings.
+
 ## [1.1.1] - 2026-10-10
 
 ### Added
