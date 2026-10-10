@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "bulk-geotag",
+  "productName": "Bulk GeoTag",
   "version": "1.2.0",
   "identifier": "com.zulupilgrim.bulkgeotag",
   "build": {
@@ -25,13 +25,24 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "deb",
+      "appimage",
+      "rpm"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
-  }
+    ],
+    "category": "Photography",
+    "shortDescription": "Add GPS location and date taken to photos, in bulk or one at a time",
+    "longDescription": "Bulk GeoTag writes GPS coordinates and an optional date taken into the EXIF data of JPEG, TIFF and WebP photos. Pick a place by search (OpenStreetMap) or on the map, preview the changes, and apply them to a whole folder or a single photo, with optional backups and a CSV log.",
+    "publisher": "André Basel",
+    "copyright": "© 2026 André Basel",
+    "homepage": "https://github.com/ZuluPilgrim/bulk-geotag"
+  },
+  "mainBinaryName": "bulk-geotag"
 }

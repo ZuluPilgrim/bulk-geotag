@@ -26,6 +26,18 @@ Built with [Tauri 2](https://tauri.app) (Rust) and [Svelte](https://svelte.dev),
 | WebP (`.webp`) | ✓ | ✓ |
 | PNG (`.png`) | ✓ | skipped and logged (not supported yet) |
 
+## Installing
+
+Build the packages (see *Building packages* below), then:
+
+| System | Command |
+|---|---|
+| Mint / Ubuntu / Debian | `sudo apt install "./Bulk GeoTag_1.2.0_amd64.deb"` |
+| Fedora / openSUSE | `sudo dnf install "./Bulk GeoTag-1.2.0-1.x86_64.rpm"` |
+| Any distro, no install | `chmod +x "Bulk GeoTag_1.2.0_amd64.AppImage"` then run it |
+
+The app appears in the menu under **Graphics** as *Bulk GeoTag*; the terminal command is `bulk-geotag`. Remove it with `sudo apt remove bulk-geotag`.
+
 ## Documentation
 
 - [User Guide](docs/USER_GUIDE.md): how to use the app
@@ -58,6 +70,19 @@ cd src-tauri && cargo test --lib    # Rust unit tests
 ```
 
 For other platforms, see the [Tauri prerequisites](https://tauri.app/start/prerequisites/).
+
+## Building packages
+
+```bash
+npm run tauri build
+```
+
+Takes ~5–10 minutes. Output in `src-tauri/target/release/bundle/`: `deb/`, `rpm/` and `appimage/`. To change the icon, edit `app-icon.svg`, then:
+
+```bash
+rsvg-convert -w 1024 -h 1024 app-icon.svg -o app-icon.png
+npm run tauri icon app-icon.png
+```
 
 ## Credits
 

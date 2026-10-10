@@ -223,6 +223,16 @@ exiftool -q -T -FileName -GPSPosition -Make -Model -DateTimeOriginal *.JPG
 ls -la --time-style=+'%F %T'
 ```
 
+## Packaging
+
+`npm run tauri build` produces `.deb`, `.rpm` and AppImage (`bundle.targets` in `tauri.conf.json`) under `src-tauri/target/release/bundle/`.
+
+- `productName` "Bulk GeoTag" is the menu/installer name; `mainBinaryName` keeps the command as `bulk-geotag`.
+- `bundle.category` "Photography" → *Graphics* in desktop menus. Descriptions, publisher and homepage feed package managers.
+- Icons: `app-icon.svg` (source) → `app-icon.png` (1024²) → `npm run tauri icon app-icon.png` regenerates everything in `src-tauri/icons/`.
+- The AppImage (~89 MB) bundles WebKitGTK; the `.deb`/`.rpm` (~4.6 MB) depend on the system's `libwebkit2gtk-4.1`.
+- The installed app's web view has a different origin from `tauri dev`, so remembered folders/map position are separate; `settings.json` is shared (same identifier).
+
 ## Gotchas
 
 - **Dev-mode CSS:** with Vite 8 and vite-plugin-svelte 7, component styles were delivered incorrectly in dev, which lost the CSS variables and `:global` rules. `svelte.config.js` sets `compilerOptions: { css: "injected" }` to work around it. Don't remove it without re-testing `npm run tauri dev`.
@@ -238,4 +248,4 @@ ls -la --time-style=+'%F %T'
 - HEIC/HEIF: little_exif supports it; it needs testing and adding to the extension lists.
 - Altitude and direction tags.
 - Date taken: shift by an offset, or a time-zone tag (OffsetTimeOriginal).
-- Packaging and release builds for Linux (`.deb`, AppImage), Windows and macOS.
+- Release builds for Windows and macOS (e.g. GitHub Actions on each tag).

@@ -14,6 +14,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow
 - Search language and result count come from settings instead of being fixed; both are part of the search cache key.
 - 403 message now points to ⚙ Settings.
 
+### Packaging
+- Linux packages: `.deb`, `.rpm` and AppImage via `npm run tauri build`.
+- App name "Bulk GeoTag" in menus (category Graphics); command stays `bulk-geotag`.
+- New app icon (photo with a map pin); source in `app-icon.svg`.
+
 ## [1.1.1] - 2026-10-10
 
 ### Added
