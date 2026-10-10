@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { open } from "@tauri-apps/plugin-dialog";
   import "leaflet/dist/leaflet.css";
   import type { Map as LMap, Marker } from "leaflet";
 
@@ -30,6 +31,9 @@
   // ---------- Backup ----------
   let backupEnabled = $state(false);
   let backupFolder = $state("");
+
+  // ---------- Log ----------
+  let logFolder = $state("");
 
   // ---------- Status ----------
   let status = $state("Choose a photo folder to begin.");
@@ -134,13 +138,22 @@
   }
 
   // ---------- FAKE actions — wired to Rust / Nominatim in later steps ----------
-  function browsePhotos() {
-    folder = "/home/abasel/Pictures/2024/Rome";
-    status = "Demo folder loaded (fake data).";
+  async function browsePhotos() {
+    const picked = await open({ directory: true, multiple: false, defaultPath: folder || undefined, title: "Choose photo folder" });
+    if (typeof picked === "string") {
+      folder = picked;
+      status = "Folder chosen (photo counts are still fake).";
+    }
   }
 
-  function browseBackup() {
-    backupFolder = "/media/abasel/Backup";
+  async function browseLog() {
+    const picked = await open({ directory: true, multiple: false, defaultPath: logFolder || undefined, title: "Choose log folder" });
+    if (typeof picked === "string") logFolder = picked;
+  }
+
+  async function browseBackup() {
+    const picked = await open({ directory: true, multiple: false, defaultPath: backupFolder || undefined, title: "Choose backup folder" });
+    if (typeof picked === "string") backupFolder = picked;
   }
 
   async function find(e: Event) {
@@ -232,6 +245,18 @@
           disabled={!backupEnabled}
         />
         <button type="button" class="primary" onclick={browseBackup} disabled={!backupEnabled}>Browse…</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Log</h2>
+      <label class="field-label" for="logdir">Write errors &amp; warnings to</label>
+      <div class="row">
+        <input id="logdir" type="text" value={logFolder} placeholder="No log (optional)" readonly />
+        {#if logFolder}
+          <button type="button" onclick={() => (logFolder = "")} title="Stop logging">✕</button>
+        {/if}
+        <button type="button" class="primary" onclick={browseLog}>Browse…</button>
       </div>
     </section>
 
