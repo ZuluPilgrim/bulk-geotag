@@ -1,7 +1,62 @@
-# Tauri + SvelteKit + TypeScript
+# Bulk GeoTag
 
-This template should help get you started developing with Tauri, SvelteKit and TypeScript in Vite.
+A desktop app for adding GPS location to a whole folder of photos at once.
 
-## Recommended IDE Setup
+Select a folder, type a place name (or click the map), confirm the spot, and Bulk GeoTag writes the coordinates into every photo's EXIF data. It can back up the originals first and log anything it had to skip.
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer).
+Built with [Tauri 2](https://tauri.app) (Rust) and [Svelte](https://svelte.dev), with maps and place search from [OpenStreetMap](https://www.openstreetmap.org).
+
+## Features
+
+- **Folder scan**: counts photos and shows how many already have GPS. Can include subfolders (any depth).
+- **Place search**: type a name such as *Colosseum, Rome* and pick from up to 5 matches, or click/drag the pin to an exact spot. Coordinates can also be typed in.
+- **Preview**: a dry run that lists what would happen to every photo, without changing anything.
+- **Safe writing**: each photo is written to a temporary copy, checked, and only then swapped in. Camera data and the file's modified date are kept.
+- **Optional backups**: originals are copied first into a backup folder that mirrors their full path.
+- **Optional CSV log**: errors and warnings (skipped files, backup notices) go to a timestamped log file.
+- **Remembers** the last photo, backup and log folders and the map position.
+
+| Format | Read GPS | Write GPS |
+|---|---|---|
+| JPEG (`.jpg`, `.jpeg`) | ✓ | ✓ |
+| TIFF (`.tif`, `.tiff`) | ✓ | ✓ |
+| WebP (`.webp`) | ✓ | ✓ |
+| PNG (`.png`) | ✓ | skipped and logged (not supported yet) |
+
+## Documentation
+
+- [User Guide](docs/USER_GUIDE.md): how to use the app
+- [Architecture](docs/ARCHITECTURE.md): how it is built, for developers
+
+## Quick start (development)
+
+Prerequisites on Ubuntu / Debian / Linux Mint 22+:
+
+```bash
+sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+  libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y   # Rust
+# Node.js LTS, e.g. via nvm: https://github.com/nvm-sh/nvm
+```
+
+Run:
+
+```bash
+npm install
+npm run tauri dev
+```
+
+Tests:
+
+```bash
+npm run check                       # TypeScript / Svelte
+cd src-tauri && cargo test --lib    # Rust unit tests
+```
+
+For other platforms, see the [Tauri prerequisites](https://tauri.app/start/prerequisites/).
+
+## Credits
+
+- Map data and place search © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), via the [Nominatim](https://nominatim.org) service. The app follows the [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/).
+- Maps drawn with [Leaflet](https://leafletjs.com).
+- EXIF reading: [kamadak-exif](https://crates.io/crates/kamadak-exif). EXIF writing: [little_exif](https://crates.io/crates/little_exif).
