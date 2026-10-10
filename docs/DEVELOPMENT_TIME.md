@@ -2,7 +2,7 @@
 
 The below shows what can be achieved when one non-coder vibe codes with Claude AI.
 
-How long Bulk GeoTag took to build, from the first message to packaged releases.
+How long Bulk GeoTag took to build, from the first message to packaged releases for Linux, Windows and macOS.
 All times are NZ local time (NZDT, UTC+13) on **Saturday 10 October 2026**.
 
 *Working time* counts only time spent on the project. The timer was paused during breaks, so *wall clock* (start to finish, breaks included) is longer.
@@ -12,9 +12,11 @@ All times are NZ local time (NZDT, UTC+13) on **Saturday 10 October 2026**.
 | | |
 |---|---|
 | Started | 13:29 |
-| Working time so far | **5h 27m** (to 22:56) |
-| Wall clock so far | 9h 27m |
+| Completed | 23:02 |
+| **Working time** | **5h 33m** |
+| Wall clock | 9h 33m |
 | Breaks | 4h 00m |
+| Waiting for package builds (included in working time) | ~38 min |
 
 ## Work sessions
 
@@ -24,7 +26,8 @@ All times are NZ local time (NZDT, UTC+13) on **Saturday 10 October 2026**.
 | — | 15:56 | 16:03 | *(break)* | |
 | 2 | 16:03 | 16:10 | 7m | File-date question; *Update modified date* option started |
 | — | 16:10 | 20:03 | *(break)* | |
-| 3 | 20:03 | *running* | 2h 53m so far | Date options, date taken, single-file mode, settings, packaging, Windows, macOS |
+| 3 | 20:03 | 23:02 | 2h 59m | Date options, date taken, single-file mode, settings, packaging, Windows, macOS |
+| **Total** | | | **5h 33m** | |
 
 ## Milestones
 
@@ -38,6 +41,7 @@ All times are NZ local time (NZDT, UTC+13) on **Saturday 10 October 2026**.
 | 22:02 | First GitHub Release with downloadable Linux packages | — | 4h 33m |
 | 22:33 | Windows installers built and **confirmed working** on a Windows VM | — | 5h 04m |
 | 22:47 | macOS build (universal .dmg) on the release. **Not tested on a Mac: no Mac hardware available.** | — | 5h 18m |
+| 23:02 | **Project complete**: Linux, Windows and macOS packages on the GitHub Release; docs finished | — | **5h 33m** |
 
 ## Waiting for package builds
 

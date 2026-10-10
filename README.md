@@ -58,6 +58,7 @@ To build the packages yourself instead, see *Building packages* below.
 - [User Guide](docs/USER_GUIDE.md): how to use the app
 - [Architecture](docs/ARCHITECTURE.md): how it is built, for developers
 - [Changelog](CHANGELOG.md): what changed in each version
+- [Development time](docs/DEVELOPMENT_TIME.md): how long it took to build, start to finish
 
 ## Quick start (development)
 
