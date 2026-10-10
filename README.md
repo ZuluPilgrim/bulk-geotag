@@ -4,6 +4,8 @@ A desktop app for adding GPS location and/or a date taken to a whole folder of p
 
 Select a folder, type a place name (or click the map), confirm the spot, optionally set a date taken, and Bulk GeoTag writes them into every photo's EXIF data. It can back up the originals first and log anything it had to skip.
 
+![Bulk GeoTag: folder and location settings on the left, map with the selected spot on the right](docs/images/screenshot.png)
+
 Built with [Tauri 2](https://tauri.app) (Rust) and [Svelte](https://svelte.dev), with maps and place search from [OpenStreetMap](https://www.openstreetmap.org).
 
 ## Features
@@ -93,7 +95,9 @@ cp "$B/rpm/Bulk GeoTag-${V}-1.x86_64.rpm"        /tmp/bgrel/bulk-geotag-${V}-1.x
 cp "$B/appimage/Bulk GeoTag_${V}_amd64.AppImage" /tmp/bgrel/bulk-geotag_${V}_amd64.AppImage
 (cd /tmp/bgrel && sha256sum bulk-geotag* > SHA256SUMS.txt)
 gh release create "$TAG" /tmp/bgrel/* --title "Bulk GeoTag $V" --notes "See CHANGELOG.md."
-``` To change the icon, edit `app-icon.svg`, then:
+```
+
+To change the icon, edit `app-icon.svg`, then:
 
 ```bash
 rsvg-convert -w 1024 -h 1024 app-icon.svg -o app-icon.png
