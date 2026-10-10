@@ -97,7 +97,7 @@ Takes ~5–10 minutes. Output in `src-tauri/target/release/bundle/`: `deb/`, `rp
 
 **Windows installers** are built by GitHub Actions (`.github/workflows/release-windows.yml`) on Windows runners: automatically when a `v*` tag is pushed, or by hand with `gh workflow run "Release (Windows)" -f tag=<tag>`. The `.msi` and `setup.exe` are attached to that tag's release and renamed to `bulk-geotag_…`. A first run takes ~17 min; later runs reuse the Rust cache.
 
-**macOS** works the same way (`.github/workflows/release-macos.yml`, `gh workflow run "Release (macOS)" -f tag=<tag>`): one universal `.dmg` for Apple Silicon and Intel, ~10 min. On a private repo, macOS runner minutes count 10× against the free allowance. **Not tested on a Mac.** After the Windows and macOS runs, regenerate `SHA256SUMS.txt` so it covers every file.
+**macOS** works the same way (`.github/workflows/release-macos.yml`, `gh workflow run "Release (macOS)" -f tag=<tag>`): one universal `.dmg` for Apple Silicon and Intel, ~10 min. **Not tested on a Mac.** After the Windows and macOS runs, regenerate `SHA256SUMS.txt` so it covers every file.
 
 To publish the Linux packages to a release (renamed without spaces, plus checksums):
 
