@@ -28,15 +28,19 @@ Built with [Tauri 2](https://tauri.app) (Rust) and [Svelte](https://svelte.dev),
 
 ## Installing
 
-Build the packages (see *Building packages* below), then:
+Download the latest package from the **[Releases page](https://github.com/ZuluPilgrim/bulk-geotag/releases/latest)**, then:
 
-| System | Command |
-|---|---|
-| Mint / Ubuntu / Debian | `sudo apt install "./Bulk GeoTag_1.2.0_amd64.deb"` |
-| Fedora / openSUSE | `sudo dnf install "./Bulk GeoTag-1.2.0-1.x86_64.rpm"` |
-| Any distro, no install | `chmod +x "Bulk GeoTag_1.2.0_amd64.AppImage"` then run it |
+| System | File | Command |
+|---|---|---|
+| Mint / Ubuntu / Debian | `bulk-geotag_<version>_amd64.deb` | `sudo apt install ./bulk-geotag_<version>_amd64.deb` |
+| Fedora / openSUSE | `bulk-geotag-<version>-1.x86_64.rpm` | `sudo dnf install ./bulk-geotag-<version>-1.x86_64.rpm` |
+| Any distro, no install | `bulk-geotag_<version>_amd64.AppImage` | `chmod +x bulk-geotag_*.AppImage` then run it |
+
+Check the download with `sha256sum -c SHA256SUMS.txt --ignore-missing` (the `SHA256SUMS.txt` file is attached to each release).
 
 The app appears in the menu under **Graphics** as *Bulk GeoTag*; the terminal command is `bulk-geotag`. Remove it with `sudo apt remove bulk-geotag`.
+
+To build the packages yourself instead, see *Building packages* below.
 
 ## Documentation
 
@@ -77,7 +81,19 @@ For other platforms, see the [Tauri prerequisites](https://tauri.app/start/prere
 npm run tauri build
 ```
 
-Takes ~5–10 minutes. Output in `src-tauri/target/release/bundle/`: `deb/`, `rpm/` and `appimage/`. To change the icon, edit `app-icon.svg`, then:
+Takes ~5–10 minutes. Output in `src-tauri/target/release/bundle/`: `deb/`, `rpm/` and `appimage/`.
+
+To publish a release (packages renamed without spaces, plus checksums):
+
+```bash
+V=1.2.0; TAG=v1.2-packaged; B=src-tauri/target/release/bundle
+mkdir -p /tmp/bgrel && rm -f /tmp/bgrel/*
+cp "$B/deb/Bulk GeoTag_${V}_amd64.deb"           /tmp/bgrel/bulk-geotag_${V}_amd64.deb
+cp "$B/rpm/Bulk GeoTag-${V}-1.x86_64.rpm"        /tmp/bgrel/bulk-geotag-${V}-1.x86_64.rpm
+cp "$B/appimage/Bulk GeoTag_${V}_amd64.AppImage" /tmp/bgrel/bulk-geotag_${V}_amd64.AppImage
+(cd /tmp/bgrel && sha256sum bulk-geotag* > SHA256SUMS.txt)
+gh release create "$TAG" /tmp/bgrel/* --title "Bulk GeoTag $V" --notes "See CHANGELOG.md."
+``` To change the icon, edit `app-icon.svg`, then:
 
 ```bash
 rsvg-convert -w 1024 -h 1024 app-icon.svg -o app-icon.png
