@@ -9,7 +9,33 @@
   type Candidate = { label: string; lat: number; lon: number };
 
   // ---------- Photos ----------
-  let folder = $state("");
+  // ---------- Remembered settings (this computer only, browser storage of the app) ----------
+  type Saved = {
+    folder?: string;
+    backupEnabled?: boolean;
+    backupFolder?: string;
+    logFolder?: string;
+    mapCenter?: [number, number];
+    mapZoom?: number;
+  };
+  const STORE_KEY = "bulk-geotag.settings.v1";
+  function loadSaved(): Saved {
+    try {
+      return JSON.parse(localStorage.getItem(STORE_KEY) ?? "{}");
+    } catch {
+      return {};
+    }
+  }
+  function save(patch: Saved) {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({ ...loadSaved(), ...patch }));
+    } catch {
+      /* storage unavailable — settings just won't be remembered */
+    }
+  }
+  const saved = loadSaved();
+
+  let folder = $state(saved.folder ?? "");
   let includeSubfolders = $state(false);
   let overwriteGps = $state(false);
 
@@ -76,11 +102,16 @@
   let lon = $state<number | null>(null);
 
   // ---------- Backup ----------
-  let backupEnabled = $state(false);
-  let backupFolder = $state("");
+  let backupEnabled = $state(saved.backupEnabled ?? false);
+  let backupFolder = $state(saved.backupFolder ?? "");
 
   // ---------- Log ----------
-  let logFolder = $state("");
+  let logFolder = $state(saved.logFolder ?? "");
+
+  // Save whenever any remembered setting changes.
+  $effect(() => {
+    save({ folder, backupEnabled, backupFolder, logFolder });
+  });
 
   // ---------- Status ----------
   let status = $state("Select a photo folder to begin.");
@@ -115,7 +146,11 @@
     (async () => {
       L = await import("leaflet");
       if (disposed) return;
-      map = L.map(mapEl).setView([20, 0], 2);
+      map = L.map(mapEl).setView(saved.mapCenter ?? [20, 0], saved.mapZoom ?? 2);
+      map.on("moveend", () => {
+        const c = map!.getCenter();
+        save({ mapCenter: [c.lat, c.lng], mapZoom: map!.getZoom() });
+      });
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
