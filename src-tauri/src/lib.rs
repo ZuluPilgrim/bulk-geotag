@@ -1,5 +1,6 @@
 mod apply;
 mod geocode;
+mod inspect;
 mod log;
 mod scan;
 mod settings;
@@ -38,6 +39,14 @@ async fn apply_gps(app: tauri::AppHandle, request: apply::ApplyRequest) -> Resul
     .map_err(|e| format!("apply task failed: {e}"))?
 }
 
+/// Single-file mode: current GPS, date taken, camera and a preview of one photo.
+#[tauri::command]
+async fn inspect_photo(path: String) -> Result<inspect::PhotoDetails, String> {
+    tauri::async_runtime::spawn_blocking(move || inspect::inspect(&path))
+        .await
+        .map_err(|e| format!("inspect task failed: {e}"))?
+}
+
 /// Where settings.json lives, so the UI can tell the user.
 #[tauri::command]
 fn settings_location(app: tauri::AppHandle) -> Result<String, String> {
@@ -55,7 +64,7 @@ pub fn run() {
             app.manage(geocode::Geocoder::new(cache_dir.join("geocode-cache.json")));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![scan_folder, geocode, apply_gps, settings_location])
+        .invoke_handler(tauri::generate_handler![scan_folder, geocode, apply_gps, inspect_photo, settings_location])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

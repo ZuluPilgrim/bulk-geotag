@@ -47,7 +47,7 @@ fn is_hidden(entry: &DirEntry) -> bool {
     entry.depth() > 0 && entry.file_name().to_str().map_or(false, |n| n.starts_with('.'))
 }
 
-fn is_supported(path: &Path) -> bool {
+pub fn is_supported(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
         .map_or(false, |e| EXTENSIONS.iter().any(|x| x.eq_ignore_ascii_case(e)))
@@ -74,12 +74,27 @@ pub fn read_gps_state(path: &Path) -> (GpsState, bool, Option<String>) {
     }
 }
 
-/// Scan `root` for supported photos. Hidden files/folders are skipped and
-/// symbolic links are not followed.
+/// Scan `root` for supported photos. `root` may be a folder or a single photo file.
+/// Hidden files/folders are skipped and symbolic links are not followed.
 pub fn scan(root: &str, recursive: bool) -> Result<ScanResult, String> {
     let root_path = Path::new(root);
+    // Single-file mode: the "root" is one photo.
+    if root_path.is_file() {
+        if !is_supported(root_path) {
+            return Err(format!("Not a supported photo (jpg, jpeg, png, tif, tiff, webp): {root}"));
+        }
+        let (gps, has_date, issue) = read_gps_state(root_path);
+        let files = vec![PhotoInfo { path: root_path.display().to_string(), gps, has_date, issue }];
+        return Ok(ScanResult {
+            photos: 1,
+            with_gps: (gps == GpsState::Present) as usize,
+            unreadable: (gps == GpsState::Unreadable) as usize,
+            files,
+            folder_errors: Vec::new(),
+        });
+    }
     if !root_path.is_dir() {
-        return Err(format!("Not a folder: {root}"));
+        return Err(format!("Not a folder or file: {root}"));
     }
 
     let walker = WalkDir::new(root_path)

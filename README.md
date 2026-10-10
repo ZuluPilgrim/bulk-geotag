@@ -1,6 +1,6 @@
 # Bulk GeoTag
 
-A desktop app for adding GPS location and/or a date taken to a whole folder of photos at once.
+A desktop app for adding GPS location and/or a date taken to a whole folder of photos at once, or to a single photo.
 
 Select a folder, type a place name (or click the map), confirm the spot, optionally set a date taken, and Bulk GeoTag writes them into every photo's EXIF data. It can back up the originals first and log anything it had to skip.
 
@@ -8,6 +8,7 @@ Built with [Tauri 2](https://tauri.app) (Rust) and [Svelte](https://svelte.dev),
 
 ## Features
 
+- **Two modes**: *Bulk folder update* or *Single file update*. Single-file mode shows the photo, its current GPS (grey pin) and date taken, and pre-fills them ready to adjust.
 - **Folder scan**: counts photos and shows how many already have GPS. Can include subfolders (any depth).
 - **Place search**: type a name such as *Colosseum, Rome* and pick from up to 5 matches, or click/drag the pin to an exact spot. Coordinates can also be typed in.
 - **Date taken** (optional): set one date and time for every photo, with its own *overwrite existing* option. Can be used with or without a location.
@@ -15,7 +16,7 @@ Built with [Tauri 2](https://tauri.app) (Rust) and [Svelte](https://svelte.dev),
 - **Safe writing**: each photo is written to a temporary copy, checked, and only then swapped in. Camera data (make, model, orientation) is kept, and the date taken is only changed if you set one. The EXIF *Modified* stamp is set to the time of the change. The file's modified date is kept by default. Tick *Update file modified date* to change it, so OneDrive and other sync tools upload the tagged photos.
 - **Optional backups**: originals are copied first into a backup folder that mirrors their full path.
 - **Optional CSV log**: errors and warnings (skipped files, backup notices) go to a timestamped log file.
-- **Remembers** the last photo, backup and log folders and the map position.
+- **Remembers** the last mode, the photo, backup and log folders, and the map position.
 
 | Format | Read GPS | Write GPS |
 |---|---|---|

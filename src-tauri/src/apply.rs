@@ -150,10 +150,14 @@ fn validate(req: &ApplyRequest) -> Result<(Option<(f64, f64)>, Option<String>), 
         if !b.is_dir() {
             return Err(format!("Backup folder not found: {}", b.display()));
         }
-        let root = fs::canonicalize(&req.root).map_err(|e| format!("Photo folder: {e}"))?;
+        let mut root = fs::canonicalize(&req.root).map_err(|e| format!("Photo folder: {e}"))?;
+        if root.is_file() {
+            // Single file: the rule applies to the folder it lives in.
+            root = root.parent().map(Path::to_path_buf).unwrap_or(root);
+        }
         let backup = fs::canonicalize(b).map_err(|e| format!("Backup folder: {e}"))?;
         if backup.starts_with(&root) {
-            return Err("The backup folder is inside the photo folder. Choose a backup folder outside it, \
+            return Err("The backup folder is inside the photo's folder. Choose a backup folder outside it, \
                         otherwise backups would be scanned and tagged on the next run."
                 .into());
         }
@@ -313,7 +317,7 @@ fn to_dms(value: f64) -> Vec<uR64> {
 }
 
 /// Read EXIF with kamadak-exif. Ok(None) = file has no EXIF at all.
-fn read_exif(path: &Path) -> Result<Option<exif::Exif>, String> {
+pub(crate) fn read_exif(path: &Path) -> Result<Option<exif::Exif>, String> {
     let file = File::open(path).map_err(|e| format!("cannot open: {e}"))?;
     match exif::Reader::new().read_from_container(&mut BufReader::new(file)) {
         Ok(d) => Ok(Some(d)),
@@ -328,7 +332,7 @@ fn tag_text(data: Option<&exif::Exif>, tag: exif::Tag) -> Option<String> {
 }
 
 /// EXIF date tag as "YYYY:MM:DD HH:MM:SS" (raw text, so it compares exactly).
-fn date_text(data: &exif::Exif, tag: exif::Tag) -> Option<String> {
+pub(crate) fn date_text(data: &exif::Exif, tag: exif::Tag) -> Option<String> {
     match &data.get_field(tag, exif::In::PRIMARY)?.value {
         exif::Value::Ascii(v) => v.first().map(|b| String::from_utf8_lossy(b).trim_end_matches('\0').trim().to_string()),
         _ => None,
@@ -338,7 +342,7 @@ fn date_text(data: &exif::Exif, tag: exif::Tag) -> Option<String> {
 /// Camera tags that must survive every write unchanged.
 const KEEP_TAGS: [exif::Tag; 3] = [exif::Tag::Make, exif::Tag::Model, exif::Tag::Orientation];
 
-fn read_coord(d: &exif::Exif, value: exif::Tag, reference: exif::Tag) -> Option<f64> {
+pub(crate) fn read_coord(d: &exif::Exif, value: exif::Tag, reference: exif::Tag) -> Option<f64> {
     let v = match &d.get_field(value, exif::In::PRIMARY)?.value {
         exif::Value::Rational(r) if r.len() == 3 => r[0].to_f64() + r[1].to_f64() / 60.0 + r[2].to_f64() / 3600.0,
         _ => return None,

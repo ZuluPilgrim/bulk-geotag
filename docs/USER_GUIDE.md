@@ -6,6 +6,7 @@ Bulk GeoTag adds a GPS location and/or a date taken to every photo in a folder. 
 
 1. [The screen at a glance](#the-screen-at-a-glance)
 2. [Tagging a folder, step by step](#tagging-a-folder-step-by-step)
+   - [Single file update](#single-file-update)
 3. [Options explained](#options-explained)
 4. [Reading the results](#reading-the-results)
 5. [The log file](#the-log-file)
@@ -22,6 +23,7 @@ Bulk GeoTag adds a GPS location and/or a date taken to every photo in a folder. 
 ```
 ┌─────────────────────────┬─────────────────────────────────────┐
 │ PHOTOS                  │                                     │
+│  ◉ Bulk  ○ Single file  │                                     │
 │  Folder  [ … ][Browse…] │                                     │
 │  ☐ Include subfolders   │                                     │
 │  ☐ Overwrite existing   │              Map                    │
@@ -66,6 +68,23 @@ Bulk GeoTag adds a GPS location and/or a date taken to every photo in a folder. 
 7. **Apply.** Click **Apply to N**, check the confirmation box (photo count, location, date taken, overwrite options, folders), and click **Write**. A progress bar shows in the status bar. When it finishes, the results panel opens and the status bar shows the totals and the log file name.
 
 > **Tip:** Try it on a folder of *copies* first, until you're comfortable with how it behaves.
+
+---
+
+### Single file update
+
+Choose **Single file update** at the top of *Photos* to work on one photo instead of a folder.
+
+1. Click **Browse…** and pick a photo (`.jpg .jpeg .tif .tiff .webp`). *Include subfolders* is hidden in this mode.
+2. A **photo card** shows a preview, the file name, the camera, and the photo's current **date taken** and **GPS**.
+3. If the photo already has GPS, the map zooms there and the pin is **grey**: that's where the photo is tagged now. **Lat/Lon** and **Date taken** are pre-filled with the photo's current values.
+4. Drag the pin (or click the map, or search) to a new spot. It turns **red**, and a small grey marker stays at the photo's current location for reference. Move it back and it turns grey again.
+5. Values the photo already has are protected like in bulk mode. A hint under the field says *"Already set on this photo. Tick Overwrite … to change it."* Until you tick the matching **Overwrite** box, *Apply* counts 0.
+6. **Preview** / **Apply** work as normal. After Apply, the photo card and grey pin update to the new values.
+
+Backups, the log and *Update file modified date* work exactly as in bulk mode. The backup folder can't be inside the photo's own folder.
+
+> TIFF photos show *No preview* unless they contain a small embedded thumbnail; tagging them works normally.
 
 ---
 
@@ -221,12 +240,13 @@ It is safe to delete.
 
 Between launches the app remembers:
 
-- the photo folder, which is rescanned on start
+- **Bulk folder** or **Single file** mode
+- the photo folder (bulk mode), which is rescanned on start
 - **Back up originals** and the backup folder
 - the log folder
 - the map's position and zoom
 
-**Not** remembered, on purpose: the location or pin (each batch is usually a different place), the *Include subfolders* and *Overwrite* boxes (safer to tick deliberately each time), the date taken box and its overwrite box, and *Update file modified date*, which starts **off** at every launch.
+**Not** remembered, on purpose: the single photo you last opened, the location or pin (each batch is usually a different place), the *Include subfolders* and *Overwrite* boxes (safer to tick deliberately each time), the date taken box and its overwrite box, and *Update file modified date*, which starts **off** at every launch.
 
 ---
 
@@ -252,6 +272,7 @@ Between launches the app remembers:
 
 ## Limitations
 
+- In single-file mode, TIFF photos have no preview (the app's built-in viewer can't show TIFF) unless they contain an embedded thumbnail.
 - PNG, HEIC/HEIF (iPhone) and RAW files are not written yet. PNG is skipped and logged. HEIC and RAW are not scanned at all.
 - Only latitude/longitude and date taken are written, not altitude, direction or time zone.
 - The date taken is the same for every photo in a run; shifting each photo's own date by an offset isn't supported yet.

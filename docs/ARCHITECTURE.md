@@ -60,7 +60,8 @@ bulk-geotag/
     └── src/
         ├── main.rs              ← entry point → lib::run()
         ├── lib.rs               ← registers plugins, state and commands
-        ├── scan.rs              ← folder walk + "has GPS?" detection
+        ├── scan.rs              ← folder walk (or single file) + "has GPS / date?" detection
+        ├── inspect.rs           ← single-file mode: current GPS, date, camera, preview
         ├── geocode.rs           ← Nominatim client: rate limit, cache, User-Agent
         ├── settings.rs          ← settings.json (server URL, contact email)
         ├── apply.rs             ← Preview / Apply: backups, safe write, verify
@@ -73,7 +74,8 @@ bulk-geotag/
 |---|---|---|---|
 | `scan_folder` | `path`, `recursive` | `ScanResult` | Runs on a blocking thread. Read-only. |
 | `geocode` | `query` | `Candidate[]` | Re-reads `settings.json` each call. Cached. Rate-limited. |
-| `apply_gps` | `request: ApplyRequest` | `ApplyResult` | `dryRun: true` = Preview. Emits `apply-progress`. |
+| `apply_gps` | `request: ApplyRequest` | `ApplyResult` | `dryRun: true` = Preview. Emits `apply-progress`. `root` may be a folder or one file. |
+| `inspect_photo` | `path` | `PhotoDetails` | Single-file mode. Read-only. Runs on a blocking thread. |
 | `settings_location` | none | path string | Creates settings.json if missing. Not used by the UI yet. |
 
 **Event:** `apply-progress` with payload `[done, total]`, emitted once per photo during Preview and Apply.
@@ -84,6 +86,7 @@ Key types (Rust → JSON):
 ScanResult   { photos, with_gps, unreadable, files: PhotoInfo[], folder_errors: PhotoInfo[] }
 PhotoInfo    { path, gps: "present" | "absent" | "unreadable", has_date, issue }
 Candidate    { label, lat, lon }
+PhotoDetails { path, name, lat?, lon?, date_taken? ("YYYY-MM-DD HH:MM:SS"), camera?, orientation, preview? (data: URL), preview_is_thumbnail, issue? }
 ApplyRequest { root, recursive, overwrite, lat?, lon?, dateTaken?, overwriteDate = false, backupDir?, logDir?, dryRun, updateModified = false }   (camelCase in)
 ApplyResult  { dry_run, total, written, skipped, warnings, errors, entries: Entry[], log_file?, log_error? }
 Entry        { time, level: "info" | "warning" | "error", path, message }
@@ -92,6 +95,7 @@ Entry        { time, level: "info" | "warning" | "error", path, message }
 ## Modules
 
 ### `scan.rs`: finding photos
+- If `root` is a **file** (single-file mode), returns just that photo; it must have a supported extension.
 - `walkdir`, with `follow_links(false)`. `max_depth` is 1 unless subfolders are on.
 - Skips hidden entries (names starting with `.`) at any depth below the selected folder.
 - Extensions: `jpg jpeg png tif tiff webp`, case-insensitive.
@@ -148,6 +152,11 @@ rename temp → original           (atomic replace on the same filesystem)
 on any failure: delete temp, original untouched
 ```
 
+### `inspect.rs`: single-file details
+- Reads GPS (`read_coord`), Date Taken (`DateTimeOriginal`), Make/Model and Orientation with kamadak-exif.
+- **Preview:** JPEG/WebP/PNG up to 25 MB are sent whole as a base64 `data:` URL (the web view applies EXIF orientation itself). Otherwise — TIFF or larger files — the EXIF **embedded thumbnail** (IFD1 `JPEGInterchangeFormat`) is used if present, and the UI rotates it from `orientation`.
+- In `apply.rs`, the backup-inside-photo-folder rule uses the file's **parent** folder in single-file mode.
+
 ### `log.rs`: CSV log
 - Name `bulk-geotag_%Y-%m-%d_%H-%M-%S.csv`, from the local start time of the run (chrono).
 - Opened in append mode. The header row is written only if the file is empty.
@@ -161,7 +170,8 @@ on any failure: delete temp, original untouched
 - **Map:** Leaflet with OSM tiles. Markers are `divIcon`s, so there are no image assets to bundle. Clicking the map or dragging the pin sets lat/lon to 6 decimal places.
 - **Update file modified date** (`updateModified`) defaults to `false` in the UI and is not remembered. On the Rust side it is `#[serde(default)]`, so false when omitted.
 - **Dialogs:** `@tauri-apps/plugin-dialog`, with `open({directory:true})` for folders and `ask()` for the Apply confirmation.
-- **Remembered settings:** `localStorage` key `bulk-geotag.settings.v1` holds the folder, backup on/off, backup folder, log folder and map centre/zoom. Every access is wrapped in try/catch.
+- **Mode:** `mode` is `"bulk" | "single"`; `root` is the folder or the file. In single mode, `inspect_photo` fills `details`, pre-fills lat/lon and date, and `atCurrent` (pin within 1e-5° of the photo's GPS) drives the pin colour: grey `at-current` while there, red once moved, plus a non-interactive grey `currentMarker` at the photo's GPS.
+- **Remembered settings:** `localStorage` key `bulk-geotag.settings.v1` holds the mode, folder, backup on/off, backup folder, log folder and map centre/zoom. Every access is wrapped in try/catch.
 
 ## Dependencies
 
@@ -174,6 +184,7 @@ on any failure: delete temp, original untouched
 | `reqwest` (rustls) | HTTPS to Nominatim |
 | `serde`, `serde_json` | Command payloads, settings, cache |
 | `chrono` | Local time for log names and lines |
+| `base64` | Preview images for single-file mode |
 | `leaflet` | Map |
 | `svelte`, `@sveltejs/kit`, `adapter-static`, `vite` | Frontend |
 

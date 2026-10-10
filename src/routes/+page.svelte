@@ -12,6 +12,7 @@
   // ---------- Remembered settings (this computer only, browser storage of the app) ----------
   type Saved = {
     folder?: string;
+    mode?: "bulk" | "single";
     backupEnabled?: boolean;
     backupFolder?: string;
     logFolder?: string;
@@ -35,7 +36,27 @@
   }
   const saved = loadSaved();
 
+  // ---------- Mode: bulk folder or single file ----------
+  type Mode = "bulk" | "single";
+  let mode = $state<Mode>(saved.mode === "single" ? "single" : "bulk");
   let folder = $state(saved.folder ?? "");
+  let filePath = $state(""); // single-file mode (not remembered)
+  // What gets scanned and written: the folder, or the one photo.
+  let root = $derived(mode === "bulk" ? folder : filePath);
+
+  type PhotoDetails = {
+    path: string;
+    name: string;
+    lat: number | null;
+    lon: number | null;
+    date_taken: string | null; // "YYYY-MM-DD HH:MM:SS"
+    camera: string | null;
+    orientation: number;
+    preview: string | null;
+    preview_is_thumbnail: boolean;
+    issue: string | null;
+  };
+  let details = $state<PhotoDetails | null>(null);
   let includeSubfolders = $state(false);
   let overwriteGps = $state(false);
   // Off by default (keep original dates). Tick it so OneDrive and other sync/backup tools notice the changed photos.
@@ -113,8 +134,8 @@
 
   // Rescan whenever the folder or the subfolder option changes.
   $effect(() => {
-    const path = folder;
-    const recursive = includeSubfolders;
+    const path = root;
+    const recursive = mode === "bulk" && includeSubfolders;
     untrack(() => runScan(path, recursive));
   });
 
@@ -135,7 +156,7 @@
 
   // Save whenever any remembered setting changes.
   $effect(() => {
-    save({ folder, backupEnabled, backupFolder, logFolder });
+    save({ folder, mode, backupEnabled, backupFolder, logFolder });
   });
 
   // ---------- Status ----------
@@ -157,8 +178,27 @@
   );
   let skipped = $derived(scan ? scan.photos - toWrite : 0);
 
+  // Single-file mode: is the pin still where the photo is already tagged?
+  let atCurrent = $derived(
+    mode === "single" &&
+      details?.lat != null &&
+      details?.lon != null &&
+      hasLocation &&
+      Math.abs(lat! - details.lat) < 1e-5 &&
+      Math.abs(lon! - details.lon) < 1e-5
+  );
+  // Grey = the photo's current location. The draggable pin is grey while it sits there and
+  // turns red once moved; the photo's old spot is then shown by a separate grey marker.
+  $effect(() => {
+    const at = atCurrent;
+    const d = mode === "single" ? details : null;
+    void lat;
+    void lon;
+    untrack(() => refreshPins(at, d));
+  });
+
   let canApply = $derived(
-    !!folder && !scanning && !busy && (hasLocation || hasDate) && toWrite > 0 && (!backupEnabled || !!backupFolder)
+    !!root && !scanning && !busy && (hasLocation || hasDate) && toWrite > 0 && (!backupEnabled || !!backupFolder)
   );
 
   // ---------- Map ----------
@@ -167,6 +207,7 @@
   let map: LMap | undefined;
   let candidateMarkers: Marker[] = [];
   let pin: Marker | null = null;
+  let currentMarker: Marker | null = null; // single-file mode: where the photo is tagged now
 
   function numberedIcon(n: number, active: boolean) {
     return L.divIcon({
@@ -177,8 +218,12 @@
     });
   }
 
-  function pinIcon() {
-    return L.divIcon({ className: "", html: `<div class="pin"></div>`, iconSize: [22, 22], iconAnchor: [11, 26] });
+  function currentPinIcon() {
+    return L.divIcon({ className: "", html: `<div class="pin current"></div>`, iconSize: [18, 18], iconAnchor: [9, 22] });
+  }
+
+  function pinIcon(atCurrent = false) {
+    return L.divIcon({ className: "", html: `<div class="pin${atCurrent ? " at-current" : ""}"></div>`, iconSize: [22, 22], iconAnchor: [11, 26] });
   }
 
   onMount(() => {
@@ -272,10 +317,75 @@
 
   // ---------- Actions ----------
   async function browsePhotos() {
-    const picked = await open({ directory: true, multiple: false, defaultPath: folder || undefined, title: "Select photo folder" });
-    if (typeof picked === "string") {
-      folder = picked;
+    if (mode === "bulk") {
+      const picked = await open({ directory: true, multiple: false, defaultPath: folder || undefined, title: "Select photo folder" });
+      if (typeof picked === "string") folder = picked;
+      return;
     }
+    const exts = ["jpg", "jpeg", "tif", "tiff", "webp"];
+    const picked = await open({
+      directory: false,
+      multiple: false,
+      defaultPath: filePath || folder || undefined,
+      title: "Select photo",
+      filters: [{ name: "Photos", extensions: [...exts, ...exts.map((e) => e.toUpperCase())] }],
+    });
+    if (typeof picked === "string") {
+      filePath = picked;
+      await loadDetails(true);
+    }
+  }
+
+  function refreshPins(at: boolean, d: PhotoDetails | null) {
+    if (!map) return;
+    pin?.setIcon(pinIcon(at));
+    const showOld = !!d && d.lat != null && d.lon != null && !at;
+    if (!showOld) {
+      currentMarker?.remove();
+      currentMarker = null;
+    } else if (currentMarker) {
+      currentMarker.setLatLng([d!.lat!, d!.lon!]);
+    } else {
+      currentMarker = L.marker([d!.lat!, d!.lon!], { icon: currentPinIcon(), interactive: false, zIndexOffset: 500 }).addTo(map);
+    }
+  }
+
+  function setMode(m: Mode) {
+    if (m === mode) return;
+    mode = m;
+    details = null;
+    scan = null;
+    currentMarker?.remove();
+    currentMarker = null;
+    status = m === "bulk" ? "Bulk folder update: select a folder." : "Single file update: select a photo.";
+  }
+
+  /** Single-file mode: read the photo's current GPS/date/preview; optionally pre-fill the fields. */
+  async function loadDetails(prefill: boolean) {
+    if (!filePath) return;
+    try {
+      details = await invoke<PhotoDetails>("inspect_photo", { path: filePath });
+    } catch (e) {
+      details = null;
+      status = `Could not read photo: ${e}`;
+      return;
+    }
+    const d = details;
+    if (!prefill) return;
+    if (d.lat != null && d.lon != null) {
+      setPin(d.lat, d.lon);
+      map?.setView([d.lat, d.lon], 14);
+    }
+    if (d.date_taken) {
+      takenDate = d.date_taken.slice(0, 10);
+      takenTime = d.date_taken.slice(11);
+    }
+  }
+
+  function thumbRotation(d: PhotoDetails) {
+    // Only an embedded EXIF thumbnail needs turning; full images are rotated by the viewer.
+    if (!d.preview_is_thumbnail) return "";
+    return { 3: "rotate(180deg)", 6: "rotate(90deg)", 8: "rotate(-90deg)" }[d.orientation] ?? "";
   }
 
   async function browseLog() {
@@ -340,8 +450,8 @@
 
   function request(dryRun: boolean) {
     return {
-      root: folder,
-      recursive: includeSubfolders,
+      root,
+      recursive: mode === "bulk" && includeSubfolders,
       overwrite: overwriteGps,
       lat: hasLocation ? lat : null,
       lon: hasLocation ? lon : null,
@@ -378,7 +488,8 @@
       progress = null;
     }
     if (!dryRun) {
-      await runScan(folder, includeSubfolders);
+      await runScan(root, mode === "bulk" && includeSubfolders);
+      if (mode === "single") await loadDetails(false); // refresh the grey pin and info
       if (summary) status = summary; // keep the Apply summary (and log name) visible after the rescan
     }
   }
@@ -391,7 +502,7 @@
     const lines = [
       `Update ${toWrite} photo${toWrite === 1 ? "" : "s"}?`,
       "",
-      `Folder: ${folder}${includeSubfolders ? " (and subfolders)" : ""}`,
+      mode === "bulk" ? `Folder: ${folder}${includeSubfolders ? " (and subfolders)" : ""}` : `Photo: ${filePath}`,
       `Location: ${hasLocation ? `${lat}, ${lon}` : "not changed"}`,
       `Overwrite existing GPS: ${overwriteGps ? "yes" : "no"}`,
       `Date taken: ${hasDate ? dateTaken.replace("T", " ") : "not changed"}`,
@@ -413,19 +524,46 @@
   <aside class="panel">
     <section>
       <h2>Photos</h2>
-      <label class="field-label" for="folder">Folder</label>
+      <div class="modes">
+        <label class="check"><input type="radio" name="mode" checked={mode === "bulk"} onchange={() => setMode("bulk")} /> Bulk folder update</label>
+        <label class="check"><input type="radio" name="mode" checked={mode === "single"} onchange={() => setMode("single")} /> Single file update</label>
+      </div>
+      <label class="field-label" for="folder">{mode === "bulk" ? "Folder" : "Photo"}</label>
       <div class="row">
-        <input id="folder" type="text" value={folder} placeholder="Select a folder…" readonly />
+        <input
+          id="folder"
+          type="text"
+          value={mode === "bulk" ? folder : filePath}
+          placeholder={mode === "bulk" ? "Select a folder…" : "Select a photo…"}
+          readonly
+        />
         <button type="button" class="primary" onclick={browsePhotos}>Browse…</button>
       </div>
-      <label class="check"><input type="checkbox" bind:checked={includeSubfolders} /> Include subfolders</label>
+      {#if mode === "bulk"}
+        <label class="check"><input type="checkbox" bind:checked={includeSubfolders} /> Include subfolders</label>
+      {/if}
       <label class="check"><input type="checkbox" bind:checked={overwriteGps} /> Overwrite existing GPS</label>
       <label class="check" title="Lets OneDrive and other sync or backup tools see that the photos changed. Untick to keep each photo's original modified date.">
         <input type="checkbox" bind:checked={updateModified} /> Update file modified date
       </label>
-      {#if scanning}
+      {#if mode === "single" && details}
+        <div class="photo-card">
+          {#if details.preview}
+            <img src={details.preview} alt={details.name} style:transform={thumbRotation(details)} />
+          {:else}
+            <div class="no-preview">No preview</div>
+          {/if}
+          <div class="photo-info">
+            <strong title={details.path}>{details.name}</strong>
+            {#if details.camera}<span>{details.camera}</span>{/if}
+            <span>Date taken: {details.date_taken ?? "none"}</span>
+            <span>GPS: {details.lat != null ? `${details.lat.toFixed(5)}, ${details.lon?.toFixed(5)}` : "none"}</span>
+            {#if details.issue}<span class="warn">{details.issue}</span>{/if}
+          </div>
+        </div>
+      {:else if scanning}
         <p class="meta">Scanning…</p>
-      {:else if scan}
+      {:else if scan && mode === "bulk"}
         <p class="meta">
           {scan.photos} photos · {scan.with_gps} already have GPS
           {#if scan.unreadable}· <span class="warn">{scan.unreadable} unreadable</span>{/if}
@@ -463,6 +601,9 @@
           <button type="button" onclick={clearLocation} title="Don't change location">✕</button>
         {/if}
       </div>
+      {#if mode === "single" && details?.lat != null && hasLocation && !overwriteGps}
+        <p class="hint">Already set on this photo.<br />Tick <b>Overwrite existing GPS</b> to change it.</p>
+      {/if}
     </section>
 
     <section>
@@ -486,6 +627,9 @@
         <p class="hint warn">Time not understood. Try 9:15, 21:15:30 or 9:15pm.</p>
       {:else if takenDate}
         <p class="hint">Will set: {takenDate} {parsedTime}</p>
+      {/if}
+      {#if mode === "single" && details?.date_taken && hasDate && !overwriteDate}
+        <p class="hint">Already set on this photo.<br />Tick <b>Overwrite existing date taken</b> to change it.</p>
       {/if}
       <label class="check"><input type="checkbox" bind:checked={overwriteDate} /> Overwrite existing date taken</label>
     </section>
@@ -849,6 +993,58 @@
   }
   :global(.cand.active) {
     background: #2563eb;
+  }
+  .modes {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 4px;
+  }
+  .modes .check {
+    margin-top: 0;
+  }
+  .photo-card {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+    align-items: flex-start;
+  }
+  .photo-card img,
+  .no-preview {
+    width: 96px;
+    height: 72px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    flex: none;
+  }
+  .no-preview {
+    display: grid;
+    place-items: center;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .photo-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 12px;
+    color: var(--muted);
+    min-width: 0;
+  }
+  .photo-info strong {
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.pin.at-current) {
+    background: #8a909c;
+  }
+  :global(.pin.current) {
+    width: 16px;
+    height: 16px;
+    background: #8a909c;
+    cursor: default;
   }
   :global(.pin) {
     width: 22px;
