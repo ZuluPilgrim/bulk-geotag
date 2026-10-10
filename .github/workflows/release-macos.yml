@@ -1,0 +1,65 @@
+# Builds the macOS app (.dmg, universal: Apple Silicon + Intel) on GitHub's macOS runners
+# and attaches it to the GitHub Release for the tag.
+#
+# NOT TESTED ON A MAC: the author has no Mac hardware. The build is produced and uploaded,
+# but nobody has run it yet. The app is not signed or notarised (needs a paid Apple
+# Developer account), so macOS Gatekeeper will block it until the user allows it.
+#
+# Runs automatically when a tag starting with "v" is pushed (e.g. v1.3),
+# or manually: Actions tab → "Release (macOS)" → Run workflow → enter an existing tag.
+# Note: on private repos, macOS runner minutes count 10× against the free allowance.
+name: Release (macOS)
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and attach to (e.g. v1.2-packaged)"
+        required: true
+
+permissions:
+  contents: write # needed to create/update the release and upload assets
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - name: Check out the tagged code
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: lts/*
+          cache: npm
+
+      # Both architectures, so one .dmg runs on Apple Silicon and Intel Macs.
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # tauri.conf.json lists the Linux formats, so ask for the macOS ones explicitly.
+      - name: Build the app and upload to the release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: --target universal-apple-darwin --bundles app,dmg
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: "Bulk GeoTag __VERSION__"
+          releaseBody: "See CHANGELOG.md for what's included."
+          releaseDraft: false
+          prerelease: false

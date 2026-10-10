@@ -22,12 +22,12 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Check out the tagged code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.tag || github.ref }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: lts/*
           cache: npm
@@ -55,3 +55,17 @@ jobs:
           releaseBody: "See CHANGELOG.md for what's included."
           releaseDraft: false
           prerelease: false
+
+      # GitHub turns the space in "Bulk GeoTag" into a dot; rename to match the Linux packages.
+      - name: Rename Windows assets (Bulk.GeoTag_* -> bulk-geotag_*)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+            -q '.assets[] | select(.name | startswith("Bulk.GeoTag_")) | "\(.apiUrl) \(.name)"' |
+          while read -r url name; do
+            new="bulk-geotag_${name#Bulk.GeoTag_}"
+            gh api -X PATCH "${url#https://api.github.com/}" -f name="$new" -q .name
+          done
