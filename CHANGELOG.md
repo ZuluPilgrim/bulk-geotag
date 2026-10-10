@@ -18,6 +18,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow
 - Linux packages: `.deb`, `.rpm` and AppImage via `npm run tauri build`.
 - App name "Bulk GeoTag" in menus (category Graphics); command stays `bulk-geotag`.
 - New app icon (photo with a map pin); source in `app-icon.svg`.
+- Windows installers (`setup.exe` and `.msi`, x64), built by GitHub Actions and attached to the release. Unsigned for now.
+- Packages published as a GitHub Release with `SHA256SUMS.txt`.
 
 ## [1.1.1] - 2026-10-10
 
@@ -58,4 +60,5 @@ First complete version.
 
 ### Known limitations
 - PNG is scanned but not written; HEIC and RAW are not supported.
+- Windows installers are unsigned (SmartScreen warning on first run). No macOS build yet.
 - On Linux the folder chooser's button reads "Open" (set by the system dialog).

@@ -37,10 +37,13 @@ Download the latest package from the **[Releases page](https://github.com/ZuluPi
 | Mint / Ubuntu / Debian | `bulk-geotag_<version>_amd64.deb` | `sudo apt install ./bulk-geotag_<version>_amd64.deb` |
 | Fedora / openSUSE | `bulk-geotag-<version>-1.x86_64.rpm` | `sudo dnf install ./bulk-geotag-<version>-1.x86_64.rpm` |
 | Any distro, no install | `bulk-geotag_<version>_amd64.AppImage` | `chmod +x bulk-geotag_*.AppImage` then run it |
+| Windows 10 / 11 | `bulk-geotag_<version>_x64-setup.exe` (or the `.msi`) | Run it. The installers are unsigned, so if SmartScreen says *"Windows protected your PC"*, click **More info → Run anyway**. |
 
-Check the download with `sha256sum -c SHA256SUMS.txt --ignore-missing` (the `SHA256SUMS.txt` file is attached to each release).
+> **Windows installers are unsigned.** They aren't code-signed (that needs a paid certificate), so Microsoft Defender SmartScreen shows *"Windows protected your PC"* the first time. Click **More info → Run anyway**. The installers are built by GitHub Actions from this repository; check a download against `SHA256SUMS.txt` (below) if you want to be sure it's untouched.
 
-The app appears in the menu under **Graphics** as *Bulk GeoTag*; the terminal command is `bulk-geotag`. Remove it with `sudo apt remove bulk-geotag`.
+Check the download with `sha256sum -c SHA256SUMS.txt --ignore-missing` (the `SHA256SUMS.txt` file is attached to each release). On Windows: `Get-FileHash .\bulk-geotag_<version>_x64-setup.exe` in PowerShell, and compare with the file.
+
+On Linux the app appears in the menu under **Graphics** as *Bulk GeoTag*; the terminal command is `bulk-geotag`. Remove it with `sudo apt remove bulk-geotag`. On Windows it's in the Start menu; remove it from *Settings → Apps*.
 
 To build the packages yourself instead, see *Building packages* below.
 
@@ -85,7 +88,9 @@ npm run tauri build
 
 Takes ~5–10 minutes. Output in `src-tauri/target/release/bundle/`: `deb/`, `rpm/` and `appimage/`.
 
-To publish a release (packages renamed without spaces, plus checksums):
+**Windows installers** are built by GitHub Actions (`.github/workflows/release-windows.yml`) on Windows runners: automatically when a `v*` tag is pushed, or by hand with `gh workflow run "Release (Windows)" -f tag=<tag>`. The `.msi` and `setup.exe` are attached to that tag's release and renamed to `bulk-geotag_…`. A first run takes ~17 min; later runs reuse the Rust cache.
+
+To publish the Linux packages to a release (renamed without spaces, plus checksums):
 
 ```bash
 V=1.2.0; TAG=v1.2-packaged; B=src-tauri/target/release/bundle
