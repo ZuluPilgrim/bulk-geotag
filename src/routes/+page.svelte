@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import { open } from "@tauri-apps/plugin-dialog";
+  import { open, ask } from "@tauri-apps/plugin-dialog";
+  import { listen } from "@tauri-apps/api/event";
   import "leaflet/dist/leaflet.css";
   import type { Map as LMap, Marker } from "leaflet";
 
@@ -25,9 +26,14 @@
   let scanning = $state(false);
   let scanSeq = 0; // ignores results from an older scan if settings change mid-scan
 
-  // Unreadable files can never be written; files with GPS only when overwriting.
+  // Writable today: JPEG, TIFF, WebP (PNG later). Unreadable files never; files with GPS only when overwriting.
+  const WRITABLE = /\.(jpe?g|tiff?|webp)$/i;
   let toWrite = $derived(
-    scan ? scan.photos - scan.unreadable - (overwriteGps ? 0 : scan.with_gps) : 0
+    scan
+      ? scan.files.filter(
+          (f) => WRITABLE.test(f.path) && f.gps !== "unreadable" && (overwriteGps || f.gps !== "present")
+        ).length
+      : 0
   );
   let skipped = $derived(scan ? scan.photos - toWrite : 0);
 
@@ -77,10 +83,11 @@
   let logFolder = $state("");
 
   // ---------- Status ----------
-  let status = $state("Choose a photo folder to begin.");
+  let status = $state("Select a photo folder to begin.");
+  let busy = $state(false); // Preview/Apply running
 
   let canApply = $derived(
-    !!folder && !scanning && lat !== null && lon !== null && toWrite > 0 && (!backupEnabled || !!backupFolder)
+    !!folder && !scanning && !busy && lat !== null && lon !== null && toWrite > 0 && (!backupEnabled || !!backupFolder)
   );
 
   // ---------- Map ----------
@@ -180,19 +187,19 @@
 
   // ---------- Actions ----------
   async function browsePhotos() {
-    const picked = await open({ directory: true, multiple: false, defaultPath: folder || undefined, title: "Choose photo folder" });
+    const picked = await open({ directory: true, multiple: false, defaultPath: folder || undefined, title: "Select photo folder" });
     if (typeof picked === "string") {
       folder = picked;
     }
   }
 
   async function browseLog() {
-    const picked = await open({ directory: true, multiple: false, defaultPath: logFolder || undefined, title: "Choose log folder" });
+    const picked = await open({ directory: true, multiple: false, defaultPath: logFolder || undefined, title: "Select log folder" });
     if (typeof picked === "string") logFolder = picked;
   }
 
   async function browseBackup() {
-    const picked = await open({ directory: true, multiple: false, defaultPath: backupFolder || undefined, title: "Choose backup folder" });
+    const picked = await open({ directory: true, multiple: false, defaultPath: backupFolder || undefined, title: "Select backup folder" });
     if (typeof picked === "string") backupFolder = picked;
   }
 
@@ -228,14 +235,85 @@
     }
   }
 
-  function preview() {
-    status = `Preview: ${toWrite} to write · ${skipped} skipped${
-      backupEnabled ? " · originals backed up" : ""
-    } — dry run, nothing changed.`;
+  // ---------- Preview / Apply ----------
+  type Entry = { time: string; level: "info" | "warning" | "error"; path: string; message: string };
+  type ApplyResult = {
+    dry_run: boolean;
+    total: number;
+    written: number;
+    skipped: number;
+    warnings: number;
+    errors: number;
+    entries: Entry[];
+    log_file: string | null;
+    log_error: string | null;
+  };
+
+  let progress = $state<[number, number] | null>(null);
+  let results = $state<ApplyResult | null>(null);
+  let showInfo = $state(true);
+
+  function request(dryRun: boolean) {
+    return {
+      root: folder,
+      recursive: includeSubfolders,
+      overwrite: overwriteGps,
+      lat: lat!,
+      lon: lon!,
+      backupDir: backupEnabled && backupFolder ? backupFolder : null,
+      logDir: logFolder || null,
+      dryRun,
+    };
   }
 
-  function apply() {
-    status = "Apply clicked — file writing is not built yet.";
+  async function runApply(dryRun: boolean) {
+    busy = true;
+    progress = null;
+    status = dryRun ? "Preparing preview…" : "Writing GPS…";
+    const unlisten = await listen<[number, number]>("apply-progress", (e) => (progress = e.payload));
+    let summary = "";
+    try {
+      const r = await invoke<ApplyResult>("apply_gps", { request: request(dryRun) });
+      results = r;
+      showInfo = true;
+      const head = dryRun ? `Preview: ${r.written} would be written` : `Done: ${r.written} written`;
+      let msg = `${head} · ${r.skipped} skipped · ${r.warnings} warnings · ${r.errors} errors`;
+      if (dryRun) msg += " — nothing changed.";
+      if (r.log_file) msg += ` · Log written: ${r.log_file}`;
+      if (r.log_error) msg += ` · Log NOT written: ${r.log_error}`;
+      status = summary = msg;
+    } catch (err) {
+      status = `${dryRun ? "Preview" : "Apply"} failed: ${err}`;
+    } finally {
+      unlisten();
+      busy = false;
+      progress = null;
+    }
+    if (!dryRun) {
+      await runScan(folder, includeSubfolders);
+      if (summary) status = summary; // keep the Apply summary (and log name) visible after the rescan
+    }
+  }
+
+  function preview() {
+    runApply(true);
+  }
+
+  async function apply() {
+    const lines = [
+      `Write GPS ${lat}, ${lon} to ${toWrite} photo${toWrite === 1 ? "" : "s"}?`,
+      "",
+      `Folder: ${folder}${includeSubfolders ? " (and subfolders)" : ""}`,
+      `Overwrite existing GPS: ${overwriteGps ? "yes" : "no"}`,
+      `Backup originals: ${backupEnabled ? backupFolder : "no"}`,
+      `Log: ${logFolder || "none"}`,
+    ];
+    const ok = await ask(lines.join("\n"), { title: "Confirm Apply", kind: "warning", okLabel: "Write GPS", cancelLabel: "Cancel" });
+    if (ok) runApply(false);
+  }
+
+  function fileName(path: string) {
+    return path.split(/[\\/]/).pop() ?? path;
   }
 </script>
 
@@ -245,7 +323,7 @@
       <h2>Photos</h2>
       <label class="field-label" for="folder">Folder</label>
       <div class="row">
-        <input id="folder" type="text" value={folder} placeholder="Choose a folder…" readonly />
+        <input id="folder" type="text" value={folder} placeholder="Select a folder…" readonly />
         <button type="button" class="primary" onclick={browsePhotos}>Browse…</button>
       </div>
       <label class="check"><input type="checkbox" bind:checked={includeSubfolders} /> Include subfolders</label>
@@ -298,7 +376,7 @@
           id="backup"
           type="text"
           value={backupFolder}
-          placeholder="Choose a backup folder…"
+          placeholder="Select a backup folder…"
           readonly
           disabled={!backupEnabled}
         />
@@ -324,9 +402,42 @@
     </section>
   </aside>
 
-  <main class="map" bind:this={mapEl}></main>
+  <div class="mapwrap">
+    <main class="map" bind:this={mapEl}></main>
 
-  <footer class="status">{status}</footer>
+    {#if results}
+      <div class="results">
+        <header>
+          <strong>{results.dry_run ? "Preview" : "Results"}</strong>
+          <span>
+            {results.written} {results.dry_run ? "to write" : "written"} · {results.skipped} skipped ·
+            {results.warnings} warnings · {results.errors} errors
+          </span>
+          <label class="check small"><input type="checkbox" bind:checked={showInfo} /> Show OK files</label>
+          <button type="button" onclick={() => (results = null)}>Close</button>
+        </header>
+        <ul>
+          {#each results.entries.filter((e) => showInfo || e.level !== "info") as e}
+            <li class={e.level}>
+              <span class="lvl">{e.level === "info" ? "✓" : e.level === "warning" ? "!" : "✕"}</span>
+              <span class="file" title={e.path}>{fileName(e.path)}</span>
+              <span class="msg">{e.message}</span>
+            </li>
+          {:else}
+            <li class="info"><span class="msg">Nothing to show.</span></li>
+          {/each}
+        </ul>
+      </div>
+    {/if}
+  </div>
+
+  <footer class="status">
+    {#if progress}
+      <progress max={progress[1] || 1} value={progress[0]}></progress>
+      <span>{progress[0]} / {progress[1]}</span>
+    {/if}
+    <span class="status-text">{status}</span>
+  </footer>
 </div>
 
 <style>
@@ -508,10 +619,81 @@
   .actions button {
     flex: 1;
   }
-  .map {
+  .mapwrap {
+    position: relative;
     min-height: 0;
   }
+  .map {
+    position: absolute;
+    inset: 0;
+  }
+  .results {
+    position: absolute;
+    inset: 16px;
+    z-index: 1000; /* above Leaflet panes */
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+  }
+  .results header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .results header span {
+    color: var(--muted);
+    font-size: 12px;
+    flex: 1;
+  }
+  .check.small {
+    margin: 0;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .results ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+  }
+  .results li {
+    display: grid;
+    grid-template-columns: 22px minmax(120px, 30%) 1fr;
+    gap: 8px;
+    padding: 5px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .results .lvl {
+    font-weight: 700;
+    text-align: center;
+  }
+  .results .info .lvl {
+    color: var(--go);
+  }
+  .results .warning .lvl {
+    color: #d97706;
+  }
+  .results .error .lvl,
+  .results .error .msg {
+    color: #dc2626;
+  }
+  .results .file {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     grid-column: 1 / -1;
     padding: 6px 12px;
     font-size: 12px;
