@@ -84,7 +84,7 @@ Key types (Rust → JSON):
 ScanResult   { photos, with_gps, unreadable, files: PhotoInfo[], folder_errors: PhotoInfo[] }
 PhotoInfo    { path, gps: "present" | "absent" | "unreadable", issue }
 Candidate    { label, lat, lon }
-ApplyRequest { root, recursive, overwrite, lat, lon, backupDir?, logDir?, dryRun }   (camelCase in)
+ApplyRequest { root, recursive, overwrite, lat, lon, backupDir?, logDir?, dryRun, updateModified = false }   (camelCase in)
 ApplyResult  { dry_run, total, written, skipped, warnings, errors, entries: Entry[], log_file?, log_error? }
 Entry        { time, level: "info" | "warning" | "error", path, message }
 ```
@@ -123,7 +123,7 @@ Requests: `GET {url}/search?q=…&format=jsonv2&limit=5&accept-language=en`, usi
    - not a writable format (PNG): **warning**, skip
    - has GPS and not overwriting: **warning**, skip
    - otherwise: back up (if on), then write
-4. **Backup:** `backup_target()` mirrors every `Normal` path component under the backup folder, dropping the root and drive prefix. An existing backup is kept (warning). A failed copy means the photo is skipped (error).
+4. **Backup:** `backup_target()` mirrors every `Normal` path component under the backup folder, dropping the root and drive prefix. The copy keeps the original's modified and accessed dates (`copy_file_dates`, because `fs::copy` only keeps permissions). An existing backup is kept (warning). A failed copy means the photo is skipped (error).
 5. **Dry run** stops there and reports *will write GPS*.
 6. **Write** with `tag_photo()` (below).
 7. **Log:** when not a dry run and a log folder is set, `log::write_log` writes warnings and errors.
@@ -137,7 +137,8 @@ load  EXIF from temp (little_exif) — or empty Metadata if the file had no EXIF
 set   GPSVersionID 2.3, Lat/LatRef, Lon/LonRef  (DMS rationals, seconds to 1/10000)
 write EXIF into temp
 verify: re-read temp → coordinates within 1e-5° AND the remembered camera tags unchanged
-restore original modified/accessed times on temp  (std FileTimes)
+if !updateModified: restore original modified/accessed times on temp (std FileTimes)
+                  else: leave them as "now" so sync tools (OneDrive, rsync…) see the change
 rename temp → original           (atomic replace on the same filesystem)
 on any failure: delete temp, original untouched
 ```
@@ -153,6 +154,7 @@ on any failure: delete temp, original untouched
 - **Scan:** an `$effect` reruns `scan_folder` when the folder or the subfolder option changes. A sequence number discards out-of-date results.
 - **Apply count** is worked out in the UI from the scan results: writable extension, not unreadable, and (overwrite or no GPS). It matches the backend's rules.
 - **Map:** Leaflet with OSM tiles. Markers are `divIcon`s, so there are no image assets to bundle. Clicking the map or dragging the pin sets lat/lon to 6 decimal places.
+- **Update modified date** (`updateModified`) defaults to `false` in the UI and is not remembered. On the Rust side it is `#[serde(default)]`, so false when omitted.
 - **Dialogs:** `@tauri-apps/plugin-dialog`, with `open({directory:true})` for folders and `ask()` for the Apply confirmation.
 - **Remembered settings:** `localStorage` key `bulk-geotag.settings.v1` holds the folder, backup on/off, backup folder, log folder and map centre/zoom. Every access is wrapped in try/catch.
 
@@ -174,12 +176,13 @@ on any failure: delete temp, original untouched
 
 ```bash
 npm run check                       # svelte-check + TypeScript
-cd src-tauri && cargo test --lib    # 8 unit tests
+cd src-tauri && cargo test --lib    # 9 unit tests
 ```
 
 | Test | Covers |
 |---|---|
 | `apply::backup_mirrors_full_path` | Backup path mirroring |
+| `apply::backup_copy_keeps_dates` | Backup copies keep the original modified date |
 | `apply::dms_round_trip` | Decimal → degrees/minutes/seconds accuracy |
 | `apply::temp_keeps_extension_and_is_hidden` | Temp file naming |
 | `geocode::parses_nominatim_json` | Response parsing, bad rows dropped |

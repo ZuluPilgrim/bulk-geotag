@@ -5,7 +5,7 @@
 //!   2. copy the photo to a hidden temp file in the same folder
 //!   3. write GPS tags into the temp file
 //!   4. re-read the temp file: coordinates must match and key camera tags must be unchanged
-//!   5. restore the original modified/accessed times on the temp file
+//!   5. if "update modified date" is off, restore the original modified/accessed times
 //!   6. rename the temp file over the original (atomic on the same drive)
 //! Any failure removes the temp file and leaves the original untouched.
 
@@ -56,6 +56,10 @@ pub struct ApplyRequest {
     pub backup_dir: Option<String>,
     pub log_dir: Option<String>,
     pub dry_run: bool,
+    /// true: photo's modified date becomes now, so OneDrive / sync tools notice the change.
+    /// false (default): keep the original modified and accessed dates.
+    #[serde(default)]
+    pub update_modified: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -157,7 +161,8 @@ pub fn run(req: &ApplyRequest, progress: &dyn Fn(usize, usize)) -> Result<ApplyR
                 let copied = target
                     .parent()
                     .map_or(Ok(()), fs::create_dir_all)
-                    .and_then(|_| fs::copy(path, &target).map(|_| ()));
+                    .and_then(|_| fs::copy(path, &target).map(|_| ()))
+                    .and_then(|_| copy_file_dates(path, &target));
                 if let Err(e) = copied {
                     add(Level::Error, &photo.path, format!("backup failed, photo not changed: {e}"));
                     skipped += 1;
@@ -172,7 +177,7 @@ pub fn run(req: &ApplyRequest, progress: &dyn Fn(usize, usize)) -> Result<ApplyR
             written += 1;
             continue;
         }
-        match tag_photo(path, req.lat, req.lon) {
+        match tag_photo(path, req.lat, req.lon, !req.update_modified) {
             Ok(()) => {
                 add(Level::Info, &photo.path, format!("{verb}: done"));
                 written += 1;
@@ -204,6 +209,20 @@ pub fn run(req: &ApplyRequest, progress: &dyn Fn(usize, usize)) -> Result<ApplyR
         log_file,
         log_error,
     })
+}
+
+/// Give `to` the same modified/accessed dates as `from` (fs::copy only keeps permissions),
+/// so a backup is a faithful copy of the original.
+fn copy_file_dates(from: &Path, to: &Path) -> std::io::Result<()> {
+    let meta = fs::metadata(from)?;
+    let mut times = FileTimes::new();
+    if let Ok(m) = meta.modified() {
+        times = times.set_modified(m);
+    }
+    if let Ok(a) = meta.accessed() {
+        times = times.set_accessed(a);
+    }
+    File::options().write(true).open(to)?.set_times(times)
 }
 
 // ---------------------------------------------------------------------------
@@ -270,7 +289,8 @@ fn temp_path(path: &Path) -> Result<PathBuf, String> {
     Ok(dir.join(format!(".{stem}.bulkgeotag-tmp.{ext}")))
 }
 
-pub fn tag_photo(path: &Path, lat: f64, lon: f64) -> Result<(), String> {
+/// `keep_dates`: restore the original modified/accessed times after writing.
+pub fn tag_photo(path: &Path, lat: f64, lon: f64, keep_dates: bool) -> Result<(), String> {
     let original = read_exif(path)?;
     let before = key_tags(&original);
     let meta = fs::metadata(path).map_err(|e| format!("cannot read file info: {e}"))?;
@@ -302,19 +322,22 @@ pub fn tag_photo(path: &Path, lat: f64, lon: f64) -> Result<(), String> {
             return Err("verification failed: existing camera data would have changed".into());
         }
 
-        // Keep the original timestamps
-        let mut times = FileTimes::new();
-        if let Ok(m) = meta.modified() {
-            times = times.set_modified(m);
+        // Keep the original timestamps, unless the user wants sync tools to see the change.
+        // (Otherwise the temp file's modified date is already "now" from the write.)
+        if keep_dates {
+            let mut times = FileTimes::new();
+            if let Ok(m) = meta.modified() {
+                times = times.set_modified(m);
+            }
+            if let Ok(a) = meta.accessed() {
+                times = times.set_accessed(a);
+            }
+            File::options()
+                .write(true)
+                .open(&temp)
+                .and_then(|f| f.set_times(times))
+                .map_err(|e| format!("cannot restore file dates: {e}"))?;
         }
-        if let Ok(a) = meta.accessed() {
-            times = times.set_accessed(a);
-        }
-        File::options()
-            .write(true)
-            .open(&temp)
-            .and_then(|f| f.set_times(times))
-            .map_err(|e| format!("cannot restore file dates: {e}"))?;
 
         fs::rename(&temp, path).map_err(|e| format!("cannot replace original: {e}"))
     })();
@@ -340,6 +363,20 @@ mod tests {
         let d = to_dms(-44.6414);
         let v = d[0].nominator as f64 + d[1].nominator as f64 / 60.0 + d[2].nominator as f64 / d[2].denominator as f64 / 3600.0;
         assert!((v - 44.6414).abs() < 1e-7);
+    }
+
+    #[test]
+    fn backup_copy_keeps_dates() {
+        let dir = std::env::temp_dir().join(format!("bg-dates-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let (a, b) = (dir.join("a.jpg"), dir.join("b.jpg"));
+        fs::write(&a, b"x").unwrap();
+        let old = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_100_000_000);
+        File::options().write(true).open(&a).unwrap().set_times(FileTimes::new().set_modified(old)).unwrap();
+        fs::copy(&a, &b).unwrap();
+        copy_file_dates(&a, &b).unwrap();
+        assert_eq!(fs::metadata(&b).unwrap().modified().unwrap(), old);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

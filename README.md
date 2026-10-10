@@ -11,7 +11,7 @@ Built with [Tauri 2](https://tauri.app) (Rust) and [Svelte](https://svelte.dev),
 - **Folder scan**: counts photos and shows how many already have GPS. Can include subfolders (any depth).
 - **Place search**: type a name such as *Colosseum, Rome* and pick from up to 5 matches, or click/drag the pin to an exact spot. Coordinates can also be typed in.
 - **Preview**: a dry run that lists what would happen to every photo, without changing anything.
-- **Safe writing**: each photo is written to a temporary copy, checked, and only then swapped in. Camera data and the file's modified date are kept.
+- **Safe writing**: each photo is written to a temporary copy, checked, and only then swapped in. Camera data (make, model, date taken) is kept. The file's modified date is kept by default. Tick *Update modified date* to change it, so OneDrive and other sync tools upload the tagged photos.
 - **Optional backups**: originals are copied first into a backup folder that mirrors their full path.
 - **Optional CSV log**: errors and warnings (skipped files, backup notices) go to a timestamped log file.
 - **Remembers** the last photo, backup and log folders and the map position.

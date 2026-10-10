@@ -25,6 +25,7 @@ Bulk GeoTag adds a GPS location to every photo in a folder. This guide covers a 
 │  Folder  [ … ][Browse…] │                                     │
 │  ☐ Include subfolders   │                                     │
 │  ☐ Overwrite existing   │              Map                    │
+│  ☐ Update modified date │                                     │
 │  57 photos · 12 have GPS│   numbered circles = search results │
 │ LOCATION                │   red pin = the spot to be written  │
 │  [ place name ][Find]   │                                     │
@@ -49,7 +50,7 @@ Bulk GeoTag adds a GPS location to every photo in a folder. This guide covers a 
 ## Tagging a folder, step by step
 
 1. **Select the photo folder.** Click **Browse…** next to *Folder*. The app scans it and shows, for example, *57 photos · 12 already have GPS*. Problem files are shown in amber.
-2. **Choose the scope.** Tick **Include subfolders** to include every folder below it. Tick **Overwrite existing GPS** only if you want to replace coordinates that are already there.
+2. **Choose the scope.** Tick **Include subfolders** to include every folder below it. Tick **Overwrite existing GPS** only if you want to replace coordinates that are already there. Tick **Update modified date** if the photos are in OneDrive, Dropbox, Google Drive or another synced or backed-up folder (see [File dates](#file-dates-and-sync-tools)).
 3. **Set the location.** Type a place in *Location* and press **Enter** or **Find**.
    - If there are several matches, numbered circles appear on the map. Click one in the list or on the map.
    - If there is exactly one match, it is selected automatically.
@@ -57,7 +58,7 @@ Bulk GeoTag adds a GPS location to every photo in a folder. This guide covers a 
 4. **Optional: back up the originals.** Tick **Back up originals** and select a backup folder. It must be **outside** the photo folder.
 5. **Optional: keep a log.** Select a folder under **Log**. Click **✕** to turn logging off again.
 6. **Preview.** Click the green **Preview** button. A panel lists every photo and what would happen to it. Nothing is changed.
-7. **Apply.** Click **Apply to N**, check the confirmation box (coordinates, photo count, folders), and click **Write GPS**. A progress bar shows in the status bar. When it finishes, the results panel opens and the status bar shows the totals and the log file name.
+7. **Apply.** Click **Apply to N**, check the confirmation box (coordinates, photo count, folders, whether modified dates will be updated), and click **Write GPS**. A progress bar shows in the status bar. When it finishes, the results panel opens and the status bar shows the totals and the log file name.
 
 > **Tip:** Try it on a folder of *copies* first, until you're comfortable with how it behaves.
 
@@ -69,6 +70,7 @@ Bulk GeoTag adds a GPS location to every photo in a folder. This guide covers a 
 |---|---|---|
 | **Include subfolders** | Only photos directly in the selected folder | Every folder below it, at any depth |
 | **Overwrite existing GPS** | Photos that already have GPS are skipped (logged as a warning) | Their GPS is replaced with the new location |
+| **Update modified date** | Each photo keeps its original modified date | Each tagged photo's modified date becomes the time it was tagged, so sync and backup tools notice the change |
 | **Back up originals** | No backup | Each photo is copied to the backup folder before it is changed |
 | **Log** (folder set) | No log | Errors and warnings are written to a CSV file |
 
@@ -78,6 +80,24 @@ Always skipped, whatever the options:
 - **Linked folders** (symbolic links are not followed)
 - **PNG** files (writing is not supported yet; logged as a warning)
 - **Unreadable** files (corrupt metadata, or not really an image; logged as an error)
+
+---
+
+### File dates and sync tools
+
+Sync and backup tools such as OneDrive, Dropbox, Google Drive and rsync often decide whether a file has changed by looking at its **modified date**. If the date stays the same, they may never upload the tagged photo. **Update modified date** is off by default, and resets to off each time the app starts, so tick it for synced folders.
+
+| Date | Update modified date **on** | **off** |
+|---|---|---|
+| File *modified* | Time of tagging | Original kept |
+| File *accessed* | Time of tagging | Original kept |
+| EXIF *Date Taken* / *DateTime* (inside the photo) | Never changed | Never changed |
+| Folder *modified* | Changes | Changes |
+| *Created* / birth time (e.g. Windows "Date created") | Becomes the time of tagging | Becomes the time of tagging |
+
+Photo apps such as Lightroom, Google Photos, Immich and digiKam sort by EXIF *Date Taken*, which is never touched.
+
+Leave the option **off** for folders that aren't synced, so file managers keep showing the original dates.
 
 ---
 
@@ -126,6 +146,8 @@ The backup copy keeps the photo's **full original path** under the backup folder
 |---|---|---|
 | `/home/fred/Photos/2024/a.jpg` | `/media/backup` | `/media/backup/home/fred/Photos/2024/a.jpg` |
 | `D:\Photos\2024\a.jpg` | `E:\Backup` | `E:\Backup\Photos\2024\a.jpg` |
+
+Backup copies keep the original photo's modified date.
 
 If a backup copy **already exists**, for example from an earlier run, it is **kept** and the photo is still tagged. The older copy is the more original one. This is logged as a warning.
 
@@ -184,7 +206,7 @@ Between launches the app remembers:
 - the log folder
 - the map's position and zoom
 
-**Not** remembered, on purpose: the location or pin (each batch is usually a different place), and the *Include subfolders* and *Overwrite* boxes (safer to tick deliberately each time).
+**Not** remembered, on purpose: the location or pin (each batch is usually a different place), the *Include subfolders* and *Overwrite* boxes (safer to tick deliberately each time), and *Update modified date*, which starts **off** at every launch.
 
 ---
 

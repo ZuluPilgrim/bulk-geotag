@@ -38,6 +38,8 @@
   let folder = $state(saved.folder ?? "");
   let includeSubfolders = $state(false);
   let overwriteGps = $state(false);
+  // Off by default (keep original dates). Tick it so OneDrive and other sync/backup tools notice the changed photos.
+  let updateModified = $state(false);
 
   type PhotoInfo = { path: string; gps: "present" | "absent" | "unreadable"; issue: string | null };
   type ScanResult = {
@@ -298,6 +300,7 @@
       backupDir: backupEnabled && backupFolder ? backupFolder : null,
       logDir: logFolder || null,
       dryRun,
+      updateModified,
     };
   }
 
@@ -340,6 +343,7 @@
       "",
       `Folder: ${folder}${includeSubfolders ? " (and subfolders)" : ""}`,
       `Overwrite existing GPS: ${overwriteGps ? "yes" : "no"}`,
+      `Update modified date: ${updateModified ? "yes" : "no (keep original)"}`,
       `Backup originals: ${backupEnabled ? backupFolder : "no"}`,
       `Log: ${logFolder || "none"}`,
     ];
@@ -363,6 +367,9 @@
       </div>
       <label class="check"><input type="checkbox" bind:checked={includeSubfolders} /> Include subfolders</label>
       <label class="check"><input type="checkbox" bind:checked={overwriteGps} /> Overwrite existing GPS</label>
+      <label class="check" title="Lets OneDrive and other sync or backup tools see that the photos changed. Untick to keep each photo's original modified date.">
+        <input type="checkbox" bind:checked={updateModified} /> Update modified date
+      </label>
       {#if scanning}
         <p class="meta">Scanning…</p>
       {:else if scan}
