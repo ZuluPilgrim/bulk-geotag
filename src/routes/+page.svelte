@@ -178,7 +178,7 @@
     status = `Selected: ${c.label}`;
   }
 
-  // ---------- FAKE actions — wired to Rust / Nominatim in later steps ----------
+  // ---------- Actions ----------
   async function browsePhotos() {
     const picked = await open({ directory: true, multiple: false, defaultPath: folder || undefined, title: "Choose photo folder" });
     if (typeof picked === "string") {
@@ -198,22 +198,34 @@
 
   async function find(e: Event) {
     e.preventDefault();
-    if (!query.trim() || !map) return;
+    const q = query.trim();
+    if (!q || !map || searching) return;
     searching = true;
-    status = `Searching for "${query}"…`;
-    await new Promise((r) => setTimeout(r, 400));
-    candidates = [
-      { label: "Colosseum, Rome, Lazio, Italy", lat: 41.890251, lon: 12.492373 },
-      { label: "Rome, Floyd County, Georgia, USA", lat: 34.257038, lon: -85.164673 },
-      { label: "Rome, Oneida County, New York, USA", lat: 43.212847, lon: -75.455903 },
-    ];
-    searching = false;
-    selected = null;
-    drawCandidates();
-    map.fitBounds(L.latLngBounds(candidates.map((c) => [c.lat, c.lon] as [number, number])), {
-      padding: [40, 40],
-    });
-    status = `${candidates.length} possible locations (fake data) — pick one or set the pin yourself.`;
+    status = `Searching for "${q}"…`;
+    try {
+      candidates = await invoke<Candidate[]>("geocode", { query: q });
+    } catch (err) {
+      candidates = [];
+      status = `Search failed: ${err}`;
+      return;
+    } finally {
+      searching = false;
+      selected = null;
+      drawCandidates();
+    }
+    if (candidates.length === 0) {
+      status = `No places found for "${q}". Try adding a country or region, or set the pin by clicking the map.`;
+      return;
+    }
+    if (candidates.length === 1) {
+      choose(0);
+    } else {
+      map.fitBounds(L.latLngBounds(candidates.map((c) => [c.lat, c.lon] as [number, number])), {
+        padding: [40, 40],
+        maxZoom: 14,
+      });
+      status = `${candidates.length} possible locations — pick one or set the pin yourself.`;
+    }
   }
 
   function preview() {
