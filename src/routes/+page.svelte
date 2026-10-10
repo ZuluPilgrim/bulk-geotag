@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
   import "leaflet/dist/leaflet.css";
   import type { Map as LMap, Marker } from "leaflet";
@@ -11,14 +12,54 @@
   let includeSubfolders = $state(false);
   let overwriteGps = $state(false);
 
-  // FAKE scan results — replaced by the Rust folder scan in a later step
-  const fakeScan = {
-    top: { photos: 40, withGps: 6 },
-    recursive: { photos: 128, withGps: 14 },
+  type PhotoInfo = { path: string; gps: "present" | "absent" | "unreadable"; issue: string | null };
+  type ScanResult = {
+    photos: number;
+    with_gps: number;
+    unreadable: number;
+    files: PhotoInfo[];
+    folder_errors: PhotoInfo[];
   };
-  let scan = $derived(folder ? (includeSubfolders ? fakeScan.recursive : fakeScan.top) : null);
-  let toWrite = $derived(scan ? (overwriteGps ? scan.photos : scan.photos - scan.withGps) : 0);
+
+  let scan = $state<ScanResult | null>(null);
+  let scanning = $state(false);
+  let scanSeq = 0; // ignores results from an older scan if settings change mid-scan
+
+  // Unreadable files can never be written; files with GPS only when overwriting.
+  let toWrite = $derived(
+    scan ? scan.photos - scan.unreadable - (overwriteGps ? 0 : scan.with_gps) : 0
+  );
   let skipped = $derived(scan ? scan.photos - toWrite : 0);
+
+  async function runScan(path: string, recursive: boolean) {
+    const seq = ++scanSeq;
+    if (!path) {
+      scan = null;
+      return;
+    }
+    scanning = true;
+    status = "Scanning…";
+    try {
+      const result = await invoke<ScanResult>("scan_folder", { path, recursive });
+      if (seq !== scanSeq) return;
+      scan = result;
+      const issues = result.unreadable + result.folder_errors.length;
+      status = `Scan complete: ${result.photos} photos${issues ? ` · ${issues} with problems` : ""}.`;
+    } catch (e) {
+      if (seq !== scanSeq) return;
+      scan = null;
+      status = `Scan failed: ${e}`;
+    } finally {
+      if (seq === scanSeq) scanning = false;
+    }
+  }
+
+  // Rescan whenever the folder or the subfolder option changes.
+  $effect(() => {
+    const path = folder;
+    const recursive = includeSubfolders;
+    untrack(() => runScan(path, recursive));
+  });
 
   // ---------- Location ----------
   let query = $state("");
@@ -39,7 +80,7 @@
   let status = $state("Choose a photo folder to begin.");
 
   let canApply = $derived(
-    !!folder && lat !== null && lon !== null && toWrite > 0 && (!backupEnabled || !!backupFolder)
+    !!folder && !scanning && lat !== null && lon !== null && toWrite > 0 && (!backupEnabled || !!backupFolder)
   );
 
   // ---------- Map ----------
@@ -142,7 +183,6 @@
     const picked = await open({ directory: true, multiple: false, defaultPath: folder || undefined, title: "Choose photo folder" });
     if (typeof picked === "string") {
       folder = picked;
-      status = "Folder chosen (photo counts are still fake).";
     }
   }
 
@@ -198,8 +238,14 @@
       </div>
       <label class="check"><input type="checkbox" bind:checked={includeSubfolders} /> Include subfolders</label>
       <label class="check"><input type="checkbox" bind:checked={overwriteGps} /> Overwrite existing GPS</label>
-      {#if scan}
-        <p class="meta">{scan.photos} photos · {scan.withGps} already have GPS</p>
+      {#if scanning}
+        <p class="meta">Scanning…</p>
+      {:else if scan}
+        <p class="meta">
+          {scan.photos} photos · {scan.with_gps} already have GPS
+          {#if scan.unreadable}· <span class="warn">{scan.unreadable} unreadable</span>{/if}
+          {#if scan.folder_errors.length}· <span class="warn">{scan.folder_errors.length} folders skipped</span>{/if}
+        </p>
       {/if}
     </section>
 
@@ -391,6 +437,10 @@
     color: var(--muted);
     font-size: 12px;
     margin: 8px 0 0;
+  }
+  .warn {
+    color: #d97706;
+    font-weight: 600;
   }
   .candidates {
     list-style: none;
