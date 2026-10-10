@@ -63,3 +63,21 @@ jobs:
           releaseBody: "See CHANGELOG.md for what's included."
           releaseDraft: false
           prerelease: false
+
+      # GitHub turns the space in "Bulk GeoTag" into a dot; rename to match the other packages.
+      # The zipped .app (only used by Tauri's auto-updater, which this app doesn't use) is removed:
+      # Mac users want the .dmg.
+      - name: Rename macOS assets (Bulk.GeoTag_* -> bulk-geotag_*), drop the .app.tar.gz
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+            -q '.assets[] | select(.name | startswith("Bulk.GeoTag_")) | "\(.apiUrl) \(.name)"' |
+          while read -r url name; do
+            if [[ "$name" == *.app.tar.gz* ]]; then
+              gh api -X DELETE "${url#https://api.github.com/}" && echo "removed $name"
+            else
+              gh api -X PATCH "${url#https://api.github.com/}" -f name="bulk-geotag_${name#Bulk.GeoTag_}" -q .name
+            fi
+          done
