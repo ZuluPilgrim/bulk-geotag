@@ -1,0 +1,57 @@
+# Builds the Windows installers (.msi and setup .exe) on GitHub's Windows runners
+# and attaches them to the GitHub Release for the tag.
+#
+# Runs automatically when a tag starting with "v" is pushed (e.g. v1.3),
+# or manually: Actions tab → "Release (Windows)" → Run workflow → enter an existing tag.
+name: Release (Windows)
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and attach to (e.g. v1.2-packaged)"
+        required: true
+
+permissions:
+  contents: write # needed to create/update the release and upload assets
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Check out the tagged code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # tauri.conf.json lists the Linux formats, so ask for the Windows ones explicitly.
+      - name: Build installers and upload to the release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: --bundles msi,nsis
+          tagName: ${{ inputs.tag || github.ref_name }}
+          releaseName: "Bulk GeoTag __VERSION__"
+          releaseBody: "See CHANGELOG.md for what's included."
+          releaseDraft: false
+          prerelease: false
