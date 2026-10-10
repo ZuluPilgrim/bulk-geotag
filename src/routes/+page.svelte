@@ -41,7 +41,38 @@
   // Off by default (keep original dates). Tick it so OneDrive and other sync/backup tools notice the changed photos.
   let updateModified = $state(false);
 
-  type PhotoInfo = { path: string; gps: "present" | "absent" | "unreadable"; issue: string | null };
+  // ---------- Date taken (optional) ----------
+  let takenDate = $state(""); // "YYYY-MM-DD" from the calendar; empty = don't change the date taken
+  let takenTime = $state(""); // typed: 9:15, 09:15:30, 21:15, 9:15pm, 0915 … blank = 12:00:00
+
+  /** Typed time → "HH:MM:SS"; blank → noon; null when it can't be understood. */
+  function parseTime(text: string): string | null {
+    const t = text.trim().toLowerCase().replace(/\s+/g, "");
+    if (t === "") return "12:00:00";
+    const m =
+      t.match(/^(\d{1,2})(?:[:.](\d{2}))?(?:[:.](\d{2}))?(am|pm|a|p)?$/) ??
+      t.match(/^(\d{2})(\d{2})(\d{2})?(am|pm|a|p)?$/); // 0915, 091530
+    if (!m) return null;
+    let h = Number(m[1]);
+    const min = Number(m[2] ?? 0);
+    const sec = Number(m[3] ?? 0);
+    const ampm = m[4];
+    if (ampm) {
+      if (h < 1 || h > 12) return null;
+      if (ampm.startsWith("p") && h !== 12) h += 12;
+      if (ampm.startsWith("a") && h === 12) h = 0;
+    }
+    if (h > 23 || min > 59 || sec > 59) return null;
+    const p2 = (n: number) => String(n).padStart(2, "0");
+    return `${p2(h)}:${p2(min)}:${p2(sec)}`;
+  }
+  let parsedTime = $derived(parseTime(takenTime));
+  let timeError = $derived(takenDate !== "" && parsedTime === null);
+  // Combined value sent to Rust: "YYYY-MM-DDTHH:MM:SS", or "" when no date is set.
+  let dateTaken = $derived(takenDate && parsedTime ? `${takenDate}T${parsedTime}` : "");
+  let overwriteDate = $state(false);
+
+  type PhotoInfo = { path: string; gps: "present" | "absent" | "unreadable"; has_date: boolean; issue: string | null };
   type ScanResult = {
     photos: number;
     with_gps: number;
@@ -56,14 +87,6 @@
 
   // Writable today: JPEG, TIFF, WebP (PNG later). Unreadable files never; files with GPS only when overwriting.
   const WRITABLE = /\.(jpe?g|tiff?|webp)$/i;
-  let toWrite = $derived(
-    scan
-      ? scan.files.filter(
-          (f) => WRITABLE.test(f.path) && f.gps !== "unreadable" && (overwriteGps || f.gps !== "present")
-        ).length
-      : 0
-  );
-  let skipped = $derived(scan ? scan.photos - toWrite : 0);
 
   async function runScan(path: string, recursive: boolean) {
     const seq = ++scanSeq;
@@ -119,8 +142,23 @@
   let status = $state("Select a photo folder to begin.");
   let busy = $state(false); // Preview/Apply running
 
+  // A photo counts if it gets GPS and/or a date taken; the same rules as the Rust side.
+  let hasLocation = $derived(lat != null && lon != null && !isNaN(lat) && !isNaN(lon));
+  let hasDate = $derived(dateTaken.trim() !== "");
+  let toWrite = $derived(
+    scan
+      ? scan.files.filter(
+          (f) =>
+            WRITABLE.test(f.path) &&
+            f.gps !== "unreadable" &&
+            ((hasLocation && (overwriteGps || f.gps !== "present")) || (hasDate && (overwriteDate || !f.has_date)))
+        ).length
+      : 0
+  );
+  let skipped = $derived(scan ? scan.photos - toWrite : 0);
+
   let canApply = $derived(
-    !!folder && !scanning && !busy && lat !== null && lon !== null && toWrite > 0 && (!backupEnabled || !!backupFolder)
+    !!folder && !scanning && !busy && (hasLocation || hasDate) && toWrite > 0 && (!backupEnabled || !!backupFolder)
   );
 
   // ---------- Map ----------
@@ -191,6 +229,16 @@
     selected = null;
     drawCandidates();
     status = msg;
+  }
+
+  function clearLocation() {
+    lat = null;
+    lon = null;
+    selected = null;
+    pin?.remove();
+    pin = null;
+    drawCandidates();
+    status = "Location cleared — GPS will not be changed.";
   }
 
   function onCoordInput() {
@@ -295,8 +343,10 @@
       root: folder,
       recursive: includeSubfolders,
       overwrite: overwriteGps,
-      lat: lat!,
-      lon: lon!,
+      lat: hasLocation ? lat : null,
+      lon: hasLocation ? lon : null,
+      dateTaken: hasDate ? dateTaken : null,
+      overwriteDate,
       backupDir: backupEnabled && backupFolder ? backupFolder : null,
       logDir: logFolder || null,
       dryRun,
@@ -339,15 +389,18 @@
 
   async function apply() {
     const lines = [
-      `Write GPS ${lat}, ${lon} to ${toWrite} photo${toWrite === 1 ? "" : "s"}?`,
+      `Update ${toWrite} photo${toWrite === 1 ? "" : "s"}?`,
       "",
       `Folder: ${folder}${includeSubfolders ? " (and subfolders)" : ""}`,
+      `Location: ${hasLocation ? `${lat}, ${lon}` : "not changed"}`,
       `Overwrite existing GPS: ${overwriteGps ? "yes" : "no"}`,
-      `Update modified date: ${updateModified ? "yes" : "no (keep original)"}`,
+      `Date taken: ${hasDate ? dateTaken.replace("T", " ") : "not changed"}`,
+      `Overwrite existing date taken: ${overwriteDate ? "yes" : "no"}`,
+      `Update file modified date: ${updateModified ? "yes" : "no (keep original)"}`,
       `Backup originals: ${backupEnabled ? backupFolder : "no"}`,
       `Log: ${logFolder || "none"}`,
     ];
-    const ok = await ask(lines.join("\n"), { title: "Confirm Apply", kind: "warning", okLabel: "Write GPS", cancelLabel: "Cancel" });
+    const ok = await ask(lines.join("\n"), { title: "Confirm Apply", kind: "warning", okLabel: "Write", cancelLabel: "Cancel" });
     if (ok) runApply(false);
   }
 
@@ -368,7 +421,7 @@
       <label class="check"><input type="checkbox" bind:checked={includeSubfolders} /> Include subfolders</label>
       <label class="check"><input type="checkbox" bind:checked={overwriteGps} /> Overwrite existing GPS</label>
       <label class="check" title="Lets OneDrive and other sync or backup tools see that the photos changed. Untick to keep each photo's original modified date.">
-        <input type="checkbox" bind:checked={updateModified} /> Update modified date
+        <input type="checkbox" bind:checked={updateModified} /> Update file modified date
       </label>
       {#if scanning}
         <p class="meta">Scanning…</p>
@@ -406,7 +459,35 @@
       <div class="coords">
         <label>Lat <input type="number" step="0.000001" bind:value={lat} onchange={onCoordInput} /></label>
         <label>Lon <input type="number" step="0.000001" bind:value={lon} onchange={onCoordInput} /></label>
+        {#if hasLocation}
+          <button type="button" onclick={clearLocation} title="Don't change location">✕</button>
+        {/if}
       </div>
+    </section>
+
+    <section>
+      <h2>Date taken</h2>
+      <label class="field-label" for="taken">Set date taken (optional)</label>
+      <div class="row">
+        <input id="taken" type="date" bind:value={takenDate} />
+        <input
+          type="text"
+          class="time"
+          class:invalid={timeError}
+          bind:value={takenTime}
+          placeholder="12:00"
+          title="Type a time: 9:15, 09:15:30, 21:15 or 9:15pm. Blank = 12:00 noon."
+        />
+        {#if takenDate || takenTime}
+          <button type="button" onclick={() => ((takenDate = ""), (takenTime = ""))} title="Don't change date taken">✕</button>
+        {/if}
+      </div>
+      {#if timeError}
+        <p class="hint warn">Time not understood. Try 9:15, 21:15:30 or 9:15pm.</p>
+      {:else if takenDate}
+        <p class="hint">Will set: {takenDate} {parsedTime}</p>
+      {/if}
+      <label class="check"><input type="checkbox" bind:checked={overwriteDate} /> Overwrite existing date taken</label>
     </section>
 
     <section>
@@ -557,7 +638,8 @@
     min-width: 0;
   }
   input[type="text"],
-  input[type="number"] {
+  input[type="number"],
+  input[type="date"] {
     background: var(--input);
     color: var(--text);
     border: 1px solid var(--border);
@@ -602,6 +684,13 @@
     color: var(--muted);
     font-size: 12px;
     margin: 8px 0 0;
+  }
+  input.time {
+    flex: 0 0 80px;
+    width: 80px;
+  }
+  input.invalid {
+    border-color: #dc2626;
   }
   .warn {
     color: #d97706;

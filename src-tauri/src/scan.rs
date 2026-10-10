@@ -26,6 +26,8 @@ pub struct PhotoInfo {
     /// Full path to the file.
     pub path: String,
     pub gps: GpsState,
+    /// Has an EXIF Date Taken (DateTimeOriginal).
+    pub has_date: bool,
     /// Reason, when `gps` is `Unreadable`.
     pub issue: Option<String>,
 }
@@ -51,26 +53,24 @@ fn is_supported(path: &Path) -> bool {
         .map_or(false, |e| EXTENSIONS.iter().any(|x| x.eq_ignore_ascii_case(e)))
 }
 
-/// Inspect one file's EXIF for GPS coordinates.
-pub fn read_gps_state(path: &Path) -> (GpsState, Option<String>) {
+/// Inspect one file's EXIF: GPS state, whether it has a Date Taken, and any problem.
+pub fn read_gps_state(path: &Path) -> (GpsState, bool, Option<String>) {
     let file = match File::open(path) {
         Ok(f) => f,
-        Err(e) => return (GpsState::Unreadable, Some(format!("cannot open: {e}"))),
+        Err(e) => return (GpsState::Unreadable, false, Some(format!("cannot open: {e}"))),
     };
     let mut reader = BufReader::new(file);
     match exif::Reader::new().read_from_container(&mut reader) {
         Ok(data) => {
             let has_lat = data.get_field(exif::Tag::GPSLatitude, exif::In::PRIMARY).is_some();
             let has_lon = data.get_field(exif::Tag::GPSLongitude, exif::In::PRIMARY).is_some();
-            if has_lat && has_lon {
-                (GpsState::Present, None)
-            } else {
-                (GpsState::Absent, None)
-            }
+            let has_date = data.get_field(exif::Tag::DateTimeOriginal, exif::In::PRIMARY).is_some();
+            let gps = if has_lat && has_lon { GpsState::Present } else { GpsState::Absent };
+            (gps, has_date, None)
         }
         // A valid image that simply carries no EXIF block is normal, not an error.
-        Err(exif::Error::NotFound(_)) => (GpsState::Absent, None),
-        Err(e) => (GpsState::Unreadable, Some(format!("unreadable metadata: {e}"))),
+        Err(exif::Error::NotFound(_)) => (GpsState::Absent, false, None),
+        Err(e) => (GpsState::Unreadable, false, Some(format!("unreadable metadata: {e}"))),
     }
 }
 
@@ -97,15 +97,15 @@ pub fn scan(root: &str, recursive: bool) -> Result<ScanResult, String> {
             Err(e) => {
                 // Unreadable subfolder (e.g. permission denied): record it and carry on.
                 let path = e.path().map(|p| p.display().to_string()).unwrap_or_else(|| root.to_string());
-                folder_errors.push(PhotoInfo { path, gps: GpsState::Unreadable, issue: Some(format!("cannot read: {e}")) });
+                folder_errors.push(PhotoInfo { path, gps: GpsState::Unreadable, has_date: false, issue: Some(format!("cannot read: {e}")) });
                 continue;
             }
         };
         if !entry.file_type().is_file() || !is_supported(entry.path()) {
             continue;
         }
-        let (gps, issue) = read_gps_state(entry.path());
-        files.push(PhotoInfo { path: entry.path().display().to_string(), gps, issue });
+        let (gps, has_date, issue) = read_gps_state(entry.path());
+        files.push(PhotoInfo { path: entry.path().display().to_string(), gps, has_date, issue });
     }
 
     Ok(ScanResult {

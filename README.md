@@ -1,8 +1,8 @@
 # Bulk GeoTag
 
-A desktop app for adding GPS location to a whole folder of photos at once.
+A desktop app for adding GPS location and/or a date taken to a whole folder of photos at once.
 
-Select a folder, type a place name (or click the map), confirm the spot, and Bulk GeoTag writes the coordinates into every photo's EXIF data. It can back up the originals first and log anything it had to skip.
+Select a folder, type a place name (or click the map), confirm the spot, optionally set a date taken, and Bulk GeoTag writes them into every photo's EXIF data. It can back up the originals first and log anything it had to skip.
 
 Built with [Tauri 2](https://tauri.app) (Rust) and [Svelte](https://svelte.dev), with maps and place search from [OpenStreetMap](https://www.openstreetmap.org).
 
@@ -10,8 +10,9 @@ Built with [Tauri 2](https://tauri.app) (Rust) and [Svelte](https://svelte.dev),
 
 - **Folder scan**: counts photos and shows how many already have GPS. Can include subfolders (any depth).
 - **Place search**: type a name such as *Colosseum, Rome* and pick from up to 5 matches, or click/drag the pin to an exact spot. Coordinates can also be typed in.
+- **Date taken** (optional): set one date and time for every photo, with its own *overwrite existing* option. Can be used with or without a location.
 - **Preview**: a dry run that lists what would happen to every photo, without changing anything.
-- **Safe writing**: each photo is written to a temporary copy, checked, and only then swapped in. Camera data (make, model, date taken) is kept. The file's modified date is kept by default. Tick *Update modified date* to change it, so OneDrive and other sync tools upload the tagged photos.
+- **Safe writing**: each photo is written to a temporary copy, checked, and only then swapped in. Camera data (make, model, orientation) is kept, and the date taken is only changed if you set one. The EXIF *Modified* stamp is set to the time of the change. The file's modified date is kept by default. Tick *Update file modified date* to change it, so OneDrive and other sync tools upload the tagged photos.
 - **Optional backups**: originals are copied first into a backup folder that mirrors their full path.
 - **Optional CSV log**: errors and warnings (skipped files, backup notices) go to a timestamped log file.
 - **Remembers** the last photo, backup and log folders and the map position.

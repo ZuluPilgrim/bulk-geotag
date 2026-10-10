@@ -1,6 +1,6 @@
 # Bulk GeoTag: User Guide
 
-Bulk GeoTag adds a GPS location to every photo in a folder. This guide covers a normal session, every option on the screen, and what to do when something goes wrong.
+Bulk GeoTag adds a GPS location and/or a date taken to every photo in a folder. This guide covers a normal session, every option on the screen, and what to do when something goes wrong.
 
 ## Contents
 
@@ -25,12 +25,15 @@ Bulk GeoTag adds a GPS location to every photo in a folder. This guide covers a 
 │  Folder  [ … ][Browse…] │                                     │
 │  ☐ Include subfolders   │                                     │
 │  ☐ Overwrite existing   │              Map                    │
-│  ☐ Update modified date │                                     │
+│  ☐ Update file modified │                                     │
 │  57 photos · 12 have GPS│   numbered circles = search results │
 │ LOCATION                │   red pin = the spot to be written  │
 │  [ place name ][Find]   │                                     │
 │  ◉ 1 Result one         │                                     │
-│  Lat [   ]  Lon [   ]   │                                     │
+│  Lat [   ]  Lon [   ] ✕ │                                     │
+│ DATE TAKEN              │                                     │
+│  [date 📅] [time  ]  ✕  │                                     │
+│  ☐ Overwrite existing   │                                     │
 │ BACKUP                  │                                     │
 │  ☐ Back up originals    │                                     │
 │  Backup to [ … ][Browse]│                                     │
@@ -43,22 +46,24 @@ Bulk GeoTag adds a GPS location to every photo in a folder. This guide covers a 
 ```
 
 - **Blue** buttons pick folders or apply changes. **Green** Preview is a safe dry run.
-- Buttons fade out when they can't be used yet. Apply needs a folder, a location, and a backup folder if backup is ticked.
+- Buttons fade out when they can't be used yet. Apply needs a folder, a location and/or a date taken, and a backup folder if backup is ticked.
 
 ---
 
 ## Tagging a folder, step by step
 
 1. **Select the photo folder.** Click **Browse…** next to *Folder*. The app scans it and shows, for example, *57 photos · 12 already have GPS*. Problem files are shown in amber.
-2. **Choose the scope.** Tick **Include subfolders** to include every folder below it. Tick **Overwrite existing GPS** only if you want to replace coordinates that are already there. Tick **Update modified date** if the photos are in OneDrive, Dropbox, Google Drive or another synced or backed-up folder (see [File dates](#file-dates-and-sync-tools)).
+2. **Choose the scope.** Tick **Include subfolders** to include every folder below it. Tick **Overwrite existing GPS** only if you want to replace coordinates that are already there. Tick **Update file modified date** if the photos are in OneDrive, Dropbox, Google Drive or another synced or backed-up folder (see [File dates](#file-dates-and-sync-tools)).
 3. **Set the location.** Type a place in *Location* and press **Enter** or **Find**.
    - If there are several matches, numbered circles appear on the map. Click one in the list or on the map.
    - If there is exactly one match, it is selected automatically.
    - To fine-tune the spot, **drag the red pin** or **click anywhere on the map**. You can also type **Lat** / **Lon** directly and press Tab.
+   - To change only the date (no GPS), leave the location empty, or click **✕** next to Lat/Lon to clear it.
+   - **Optional: set the date taken.** Pick a date from the calendar under **Date taken** and type a time next to it (blank = 12:00 noon). Every photo gets that same date and time. Tick **Overwrite existing date taken** to replace a date the camera already recorded; otherwise only photos without one get it. See [Setting the date taken](#setting-the-date-taken).
 4. **Optional: back up the originals.** Tick **Back up originals** and select a backup folder. It must be **outside** the photo folder.
 5. **Optional: keep a log.** Select a folder under **Log**. Click **✕** to turn logging off again.
 6. **Preview.** Click the green **Preview** button. A panel lists every photo and what would happen to it. Nothing is changed.
-7. **Apply.** Click **Apply to N**, check the confirmation box (coordinates, photo count, folders, whether modified dates will be updated), and click **Write GPS**. A progress bar shows in the status bar. When it finishes, the results panel opens and the status bar shows the totals and the log file name.
+7. **Apply.** Click **Apply to N**, check the confirmation box (photo count, location, date taken, overwrite options, folders), and click **Write**. A progress bar shows in the status bar. When it finishes, the results panel opens and the status bar shows the totals and the log file name.
 
 > **Tip:** Try it on a folder of *copies* first, until you're comfortable with how it behaves.
 
@@ -69,8 +74,9 @@ Bulk GeoTag adds a GPS location to every photo in a folder. This guide covers a 
 | Option | Off (default) | On |
 |---|---|---|
 | **Include subfolders** | Only photos directly in the selected folder | Every folder below it, at any depth |
-| **Overwrite existing GPS** | Photos that already have GPS are skipped (logged as a warning) | Their GPS is replaced with the new location |
-| **Update modified date** | Each photo keeps its original modified date | Each tagged photo's modified date becomes the time it was tagged, so sync and backup tools notice the change |
+| **Overwrite existing GPS** | Photos that already have GPS keep it (logged as a warning) | Their GPS is replaced with the new location |
+| **Overwrite existing date taken** | Photos that already have a date taken keep it (logged as a warning) | Their date taken is replaced with the one you set |
+| **Update file modified date** | Each photo keeps its original modified date | Each tagged photo's modified date becomes the time it was tagged, so sync and backup tools notice the change |
 | **Back up originals** | No backup | Each photo is copied to the backup folder before it is changed |
 | **Log** (folder set) | No log | Errors and warnings are written to a CSV file |
 
@@ -85,19 +91,33 @@ Always skipped, whatever the options:
 
 ### File dates and sync tools
 
-Sync and backup tools such as OneDrive, Dropbox, Google Drive and rsync often decide whether a file has changed by looking at its **modified date**. If the date stays the same, they may never upload the tagged photo. **Update modified date** is off by default, and resets to off each time the app starts, so tick it for synced folders.
+Sync and backup tools such as OneDrive, Dropbox, Google Drive and rsync often decide whether a file has changed by looking at its **modified date**. If the date stays the same, they may never upload the tagged photo. **Update file modified date** is off by default, and resets to off each time the app starts, so tick it for synced folders.
 
-| Date | Update modified date **on** | **off** |
+| Date | Update file modified date **on** | **off** |
 |---|---|---|
 | File *modified* | Time of tagging | Original kept |
 | File *accessed* | Time of tagging | Original kept |
-| EXIF *Date Taken* / *DateTime* (inside the photo) | Never changed | Never changed |
+| EXIF *Date Taken* and *Digitized* (inside the photo) | Only changed if you set a date taken | Same |
+| EXIF *Modified* (DateTime, inside the photo) | Set to the time of tagging whenever the photo's EXIF is changed | Same |
 | Folder *modified* | Changes | Changes |
 | *Created* / birth time (e.g. Windows "Date created") | Becomes the time of tagging | Becomes the time of tagging |
 
-Photo apps such as Lightroom, Google Photos, Immich and digiKam sort by EXIF *Date Taken*, which is never touched.
+Photo apps such as Lightroom, Google Photos, Immich and digiKam sort by EXIF *Date Taken*, which is only changed when you set one.
 
 Leave the option **off** for folders that aren't synced, so file managers keep showing the original dates.
+
+---
+
+### Setting the date taken
+
+The **Date taken** box sets the date and time a photo was taken, for example for scanned prints or a camera whose clock was never set.
+
+- It writes two EXIF tags: **Date Taken** (DateTimeOriginal) and **Digitized** (CreateDate). The EXIF **Modified** tag (DateTime) is set to the current time whenever the app changes a photo's EXIF, whether that's the date, GPS, or both.
+- Pick the date from the calendar, then **type the time** in the box beside it. Accepted: `9:15`, `09:15:30`, `21:15`, `9:15pm`, `12am`, `0915`, `9.15`. Leave it blank for **12:00 noon**. The line underneath shows exactly what will be written, and turns into a warning if the time isn't understood.
+- Every photo in the run gets **the same** date and time.
+- Photos that already have a date taken keep it, unless **Overwrite existing date taken** is ticked. Kept dates are logged as warnings.
+- The time is stored as local time, as cameras do. No time zone is recorded.
+- You can set a date only, a location only, or both. A photo is counted in *Apply to N* if it would get at least one of them.
 
 ---
 
@@ -206,7 +226,7 @@ Between launches the app remembers:
 - the log folder
 - the map's position and zoom
 
-**Not** remembered, on purpose: the location or pin (each batch is usually a different place), the *Include subfolders* and *Overwrite* boxes (safer to tick deliberately each time), and *Update modified date*, which starts **off** at every launch.
+**Not** remembered, on purpose: the location or pin (each batch is usually a different place), the *Include subfolders* and *Overwrite* boxes (safer to tick deliberately each time), the date taken box and its overwrite box, and *Update file modified date*, which starts **off** at every launch.
 
 ---
 
@@ -214,7 +234,8 @@ Between launches the app remembers:
 
 | Message / symptom | Cause and fix |
 |---|---|
-| **Apply stays faded** | It needs a folder, a pin, at least one photo to write, and a backup folder if backup is ticked. A scan might also still be running. |
+| **Apply stays faded** | It needs a folder, a location and/or a date taken, at least one photo to write, and a backup folder if backup is ticked. A scan might also still be running. |
+| **"Nothing to write"** | Neither a location nor a date taken is set. |
 | **"The backup folder is inside the photo folder"** | Select a backup folder outside the photo folder. Otherwise backups would be scanned and tagged next time. |
 | **Search failed: … 403** | Nominatim refused the request. Check `contact_email` in settings.json for typos, or try again later. |
 | **Search failed: … 429** | Too many requests. Wait a minute. |
@@ -232,6 +253,7 @@ Between launches the app remembers:
 ## Limitations
 
 - PNG, HEIC/HEIF (iPhone) and RAW files are not written yet. PNG is skipped and logged. HEIC and RAW are not scanned at all.
-- Only latitude and longitude are written, not altitude or direction.
+- Only latitude/longitude and date taken are written, not altitude, direction or time zone.
+- The date taken is the same for every photo in a run; shifting each photo's own date by an offset isn't supported yet.
 - There's no undo apart from the backups, so use **Back up originals** for anything you can't afford to lose.
 - The development build (`npm run tauri dev`) and the installed app keep separate remembered settings.

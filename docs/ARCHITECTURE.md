@@ -82,9 +82,9 @@ Key types (Rust → JSON):
 
 ```text
 ScanResult   { photos, with_gps, unreadable, files: PhotoInfo[], folder_errors: PhotoInfo[] }
-PhotoInfo    { path, gps: "present" | "absent" | "unreadable", issue }
+PhotoInfo    { path, gps: "present" | "absent" | "unreadable", has_date, issue }
 Candidate    { label, lat, lon }
-ApplyRequest { root, recursive, overwrite, lat, lon, backupDir?, logDir?, dryRun, updateModified = false }   (camelCase in)
+ApplyRequest { root, recursive, overwrite, lat?, lon?, dateTaken?, overwriteDate = false, backupDir?, logDir?, dryRun, updateModified = false }   (camelCase in)
 ApplyResult  { dry_run, total, written, skipped, warnings, errors, entries: Entry[], log_file?, log_error? }
 Entry        { time, level: "info" | "warning" | "error", path, message }
 ```
@@ -95,7 +95,7 @@ Entry        { time, level: "info" | "warning" | "error", path, message }
 - `walkdir`, with `follow_links(false)`. `max_depth` is 1 unless subfolders are on.
 - Skips hidden entries (names starting with `.`) at any depth below the selected folder.
 - Extensions: `jpg jpeg png tif tiff webp`, case-insensitive.
-- GPS detection uses **kamadak-exif**. GPS is *present* when both `GPSLatitude` and `GPSLongitude` exist. "No EXIF at all" counts as *absent*, not an error. Any other parse failure counts as *unreadable*.
+- GPS and date detection use **kamadak-exif**. `has_date` is true when `DateTimeOriginal` exists. GPS is *present* when both `GPSLatitude` and `GPSLongitude` exist. "No EXIF at all" counts as *absent*, not an error. Any other parse failure counts as *unreadable*.
 - Folders that can't be opened go in `folder_errors` and aren't counted as photos.
 
 ### `geocode.rs` + `settings.rs`: place search
@@ -116,12 +116,14 @@ Requests: `GET {url}/search?q=…&format=jsonv2&limit=5&accept-language=en`, usi
 ### `apply.rs`: Preview and Apply
 `run(request, progress)`:
 
-1. **Validate:** lat/lon in range. The backup folder must exist and must not be inside the photo folder (compared after `canonicalize`).
+1. **Validate:** lat/lon both set or both empty, and in range. `dateTaken` (HTML `datetime-local`, `YYYY-MM-DDTHH:MM[:SS]`) is converted to EXIF `YYYY:MM:DD HH:MM:SS`. At least one of location or date is required. The backup folder must exist and must not be inside the photo folder (compared after `canonicalize`).
 2. **Rescan** with `scan::scan`, so the backend never trusts stale UI state.
 3. For each photo, decide:
    - unreadable: **error**, skip
    - not a writable format (PNG): **warning**, skip
-   - has GPS and not overwriting: **warning**, skip
+   - location set: GPS is written unless the photo has GPS and *overwrite* is off (**warning**)
+   - date set: date is written unless the photo has a date taken and *overwriteDate* is off (**warning**)
+   - nothing left to write for this photo: skip
    - otherwise: back up (if on), then write
 4. **Backup:** `backup_target()` mirrors every `Normal` path component under the backup folder, dropping the root and drive prefix. The copy keeps the original's modified and accessed dates (`copy_file_dates`, because `fs::copy` only keeps permissions). An existing backup is kept (warning). A failed copy means the photo is skipped (error).
 5. **Dry run** stops there and reports *will write GPS*.
@@ -131,12 +133,15 @@ Requests: `GET {url}/search?q=…&format=jsonv2&limit=5&accept-language=en`, usi
 `tag_photo(path, lat, lon)`, the safe-write sequence:
 
 ```text
-read original EXIF (kamadak)      → error if unparseable; remember Make/Model/DateTime/DateTimeOriginal/Orientation
+read original EXIF (kamadak)      → error if unparseable; remember Make/Model/Orientation and DateTimeOriginal
 copy  photo → .<stem>.bulkgeotag-tmp.<ext>   (same folder; hidden; keeps extension for format detection)
 load  EXIF from temp (little_exif) — or empty Metadata if the file had no EXIF
-set   GPSVersionID 2.3, Lat/LatRef, Lon/LonRef  (DMS rationals, seconds to 1/10000)
+if location: set GPSVersionID 2.3, Lat/LatRef, Lon/LonRef  (DMS rationals, seconds to 1/10000)
+if date:     set DateTimeOriginal + CreateDate
+always:      set ModifyDate (EXIF DateTime) = now
 write EXIF into temp
-verify: re-read temp → coordinates within 1e-5° AND the remembered camera tags unchanged
+verify: re-read temp → coordinates within 1e-5°; DateTimeOriginal + DateTimeDigitized equal the new date
+        (or DateTimeOriginal unchanged if no date was set); DateTime = now; Make/Model/Orientation unchanged
 if !updateModified: restore original modified/accessed times on temp (std FileTimes)
                   else: leave them as "now" so sync tools (OneDrive, rsync…) see the change
 rename temp → original           (atomic replace on the same filesystem)
@@ -154,7 +159,7 @@ on any failure: delete temp, original untouched
 - **Scan:** an `$effect` reruns `scan_folder` when the folder or the subfolder option changes. A sequence number discards out-of-date results.
 - **Apply count** is worked out in the UI from the scan results: writable extension, not unreadable, and (overwrite or no GPS). It matches the backend's rules.
 - **Map:** Leaflet with OSM tiles. Markers are `divIcon`s, so there are no image assets to bundle. Clicking the map or dragging the pin sets lat/lon to 6 decimal places.
-- **Update modified date** (`updateModified`) defaults to `false` in the UI and is not remembered. On the Rust side it is `#[serde(default)]`, so false when omitted.
+- **Update file modified date** (`updateModified`) defaults to `false` in the UI and is not remembered. On the Rust side it is `#[serde(default)]`, so false when omitted.
 - **Dialogs:** `@tauri-apps/plugin-dialog`, with `open({directory:true})` for folders and `ask()` for the Apply confirmation.
 - **Remembered settings:** `localStorage` key `bulk-geotag.settings.v1` holds the folder, backup on/off, backup folder, log folder and map centre/zoom. Every access is wrapped in try/catch.
 
@@ -165,7 +170,7 @@ on any failure: delete temp, original untouched
 | `tauri` 2, `tauri-plugin-dialog`, `tauri-plugin-opener` | App shell, native folder chooser |
 | `walkdir` | Folder traversal |
 | `kamadak-exif` | Reading EXIF (detection + verification) |
-| `little_exif` | Writing EXIF into JPEG / TIFF / WebP |
+| `little_exif` | Writing EXIF (GPS, dates) into JPEG / TIFF / WebP |
 | `reqwest` (rustls) | HTTPS to Nominatim |
 | `serde`, `serde_json` | Command payloads, settings, cache |
 | `chrono` | Local time for log names and lines |
@@ -176,13 +181,14 @@ on any failure: delete temp, original untouched
 
 ```bash
 npm run check                       # svelte-check + TypeScript
-cd src-tauri && cargo test --lib    # 9 unit tests
+cd src-tauri && cargo test --lib    # 10 unit tests
 ```
 
 | Test | Covers |
 |---|---|
 | `apply::backup_mirrors_full_path` | Backup path mirroring |
 | `apply::backup_copy_keeps_dates` | Backup copies keep the original modified date |
+| `apply::exif_date_from_ui_input` | Date picker value → EXIF date format |
 | `apply::dms_round_trip` | Decimal → degrees/minutes/seconds accuracy |
 | `apply::temp_keeps_extension_and_is_hidden` | Temp file naming |
 | `geocode::parses_nominatim_json` | Response parsing, bad rows dropped |
@@ -212,5 +218,6 @@ ls -la --time-style=+'%F %T'
 - PNG: write a standard `eXIf` chunk directly.
 - HEIC/HEIF: little_exif supports it; it needs testing and adding to the extension lists.
 - Altitude and direction tags.
+- Date taken: shift by an offset, or a time-zone tag (OffsetTimeOriginal).
 - A settings screen in the UI for `settings.json`.
 - Packaging and release builds for Linux (`.deb`, AppImage), Windows and macOS.
