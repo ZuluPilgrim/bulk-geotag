@@ -29,6 +29,7 @@ Built with [Tauri 2](https://tauri.app) (Rust) and [Svelte](https://svelte.dev),
 
 - [User Guide](docs/USER_GUIDE.md): how to use the app
 - [Architecture](docs/ARCHITECTURE.md): how it is built, for developers
+- [Changelog](CHANGELOG.md): what changed in each version
 
 ## Quick start (development)
 

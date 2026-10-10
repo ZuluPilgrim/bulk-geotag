@@ -18,6 +18,7 @@ const MAX_RESULTS: &str = "5";
 const LANGUAGE: &str = "en";
 const MIN_INTERVAL: Duration = Duration::from_millis(1100); // a little over 1 s, to stay safely under the limit
 
+/// One search result, as shown in the UI list and on the map.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Candidate {
     pub label: String,
@@ -33,6 +34,8 @@ struct NominatimPlace {
     display_name: String,
 }
 
+/// Shared Nominatim client, kept in Tauri state for the life of the app.
+/// Holds the HTTP client, the app-wide rate limiter and the on-disk result cache.
 pub struct Geocoder {
     client: reqwest::Client,
     last_request: Mutex<Option<Instant>>,
@@ -41,6 +44,7 @@ pub struct Geocoder {
 }
 
 impl Geocoder {
+    /// `cache_path`: JSON file in the app cache folder. It is read lazily on first use.
     pub fn new(cache_path: PathBuf) -> Self {
         Self {
             client: reqwest::Client::builder()
@@ -53,6 +57,7 @@ impl Geocoder {
         }
     }
 
+    /// Identifying User-Agent required by the usage policy: app/version, repo URL, optional email.
     fn user_agent(settings: &Settings) -> String {
         let email = settings.contact_email.trim();
         if email.is_empty() {
@@ -62,11 +67,14 @@ impl Geocoder {
         }
     }
 
+    /// Cache key: server + language + limit + query (lower-cased, whitespace collapsed),
+    /// so "Rome  ITALY" and "rome italy" share one entry and a server change never reuses old results.
     fn cache_key(settings: &Settings, query: &str) -> String {
         let q = query.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
         format!("{}|{LANGUAGE}|{MAX_RESULTS}|{q}", settings.nominatim_url.trim_end_matches('/'))
     }
 
+    /// Run `f` on the cache, loading it from disk the first time. A missing or broken file means an empty cache.
     fn with_cache<R>(&self, f: impl FnOnce(&mut HashMap<String, Vec<Candidate>>) -> R) -> R {
         let mut guard = self.cache.lock().unwrap();
         let map = guard.get_or_insert_with(|| {
@@ -78,6 +86,7 @@ impl Geocoder {
         f(map)
     }
 
+    /// Write the cache to disk. Best-effort: failure only means the next launch searches again.
     fn save_cache(&self) {
         let json = self.with_cache(|m| serde_json::to_string(m).unwrap_or_default());
         if let Some(dir) = self.cache_path.parent() {
@@ -95,6 +104,8 @@ impl Geocoder {
         next_allowed - now
     }
 
+    /// Look up `query`: cache first; otherwise wait for a rate-limit slot, call `/search`,
+    /// turn HTTP errors into readable messages, and cache the parsed results.
     pub async fn search(&self, settings: &Settings, query: &str) -> Result<Vec<Candidate>, String> {
         let query = query.trim();
         if query.is_empty() {
@@ -155,6 +166,7 @@ impl Geocoder {
     }
 }
 
+/// Convert Nominatim rows to candidates, dropping any whose lat/lon don't parse.
 fn parse_places(places: Vec<NominatimPlace>) -> Vec<Candidate> {
     places
         .into_iter()

@@ -20,6 +20,7 @@
     mapZoom?: number;
   };
   const STORE_KEY = "bulk-geotag.settings.v1";
+  /** Read remembered settings from browser storage ({} if none, or storage is unavailable). */
   function loadSaved(): Saved {
     try {
       return JSON.parse(localStorage.getItem(STORE_KEY) ?? "{}");
@@ -27,6 +28,7 @@
       return {};
     }
   }
+  /** Merge `patch` into the remembered settings. Failures are ignored: settings just aren't kept. */
   function save(patch: Saved) {
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({ ...loadSaved(), ...patch }));
@@ -109,6 +111,7 @@
   // Writable today: JPEG, TIFF, WebP (PNG later). Unreadable files never; files with GPS only when overwriting.
   const WRITABLE = /\.(jpe?g|tiff?|webp)$/i;
 
+  /** Ask Rust to scan a folder (or one photo). Results from an older, superseded scan are ignored. */
   async function runScan(path: string, recursive: boolean) {
     const seq = ++scanSeq;
     if (!path) {
@@ -209,6 +212,7 @@
   let pin: Marker | null = null;
   let currentMarker: Marker | null = null; // single-file mode: where the photo is tagged now
 
+  /** Map marker for search result n; blue when it is the selected result. */
   function numberedIcon(n: number, active: boolean) {
     return L.divIcon({
       className: "",
@@ -218,10 +222,12 @@
     });
   }
 
+  /** Small grey marker: where the photo is tagged now (single-file mode, once the pin has moved). */
   function currentPinIcon() {
     return L.divIcon({ className: "", html: `<div class="pin current"></div>`, iconSize: [18, 18], iconAnchor: [9, 22] });
   }
 
+  /** The draggable pin: red, or grey while it sits on the photo's current location. */
   function pinIcon(atCurrent = false) {
     return L.divIcon({ className: "", html: `<div class="pin${atCurrent ? " at-current" : ""}"></div>`, iconSize: [22, 22], iconAnchor: [11, 26] });
   }
@@ -248,10 +254,12 @@
     };
   });
 
+  /** Round a coordinate to 6 decimals (~0.1 m), as shown in the Lat/Lon boxes. */
   function round(n: number) {
     return Math.round(n * 1e6) / 1e6;
   }
 
+  /** Put the pin at a location and update Lat/Lon. `manual` = set by the user (map click/drag/typing), which clears the selected search result. */
   function setPin(newLat: number, newLon: number, manual = false) {
     lat = round(newLat);
     lon = round(newLon);
@@ -270,12 +278,14 @@
     if (manual) markManual("Pin placed manually.");
   }
 
+  /** The user placed the pin themselves: deselect any search result and say so in the status bar. */
   function markManual(msg: string) {
     selected = null;
     drawCandidates();
     status = msg;
   }
 
+  /** Remove the location entirely, so GPS is left unchanged (date-only runs). */
   function clearLocation() {
     lat = null;
     lon = null;
@@ -286,6 +296,7 @@
     status = "Location cleared — GPS will not be changed.";
   }
 
+  /** Lat/Lon typed by hand: validate the range and move the pin there. */
   function onCoordInput() {
     if (lat === null || lon === null || isNaN(lat) || isNaN(lon)) return;
     if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
@@ -296,6 +307,7 @@
     map?.panTo([lat, lon]);
   }
 
+  /** Redraw the numbered search-result markers (highlighting the selected one). */
   function drawCandidates() {
     if (!map) return;
     candidateMarkers.forEach((m) => m.remove());
@@ -306,6 +318,7 @@
     );
   }
 
+  /** Pick search result i: move the pin there and zoom in. */
   function choose(i: number) {
     selected = i;
     const c = candidates[i];
@@ -316,6 +329,7 @@
   }
 
   // ---------- Actions ----------
+  /** Browse… for the photo folder (bulk mode) or a single photo (single-file mode). */
   async function browsePhotos() {
     if (mode === "bulk") {
       const picked = await open({ directory: true, multiple: false, defaultPath: folder || undefined, title: "Select photo folder" });
@@ -336,6 +350,7 @@
     }
   }
 
+  /** Keep pin colours in sync: grey pin while at the photo's current spot; otherwise red pin plus a grey marker at the old spot. */
   function refreshPins(at: boolean, d: PhotoDetails | null) {
     if (!map) return;
     pin?.setIcon(pinIcon(at));
@@ -350,6 +365,7 @@
     }
   }
 
+  /** Switch between bulk folder and single file mode, clearing the other mode's scan and photo details. */
   function setMode(m: Mode) {
     if (m === mode) return;
     mode = m;
@@ -382,22 +398,26 @@
     }
   }
 
+  /** CSS rotation for an embedded EXIF thumbnail, from the photo's orientation tag. */
   function thumbRotation(d: PhotoDetails) {
     // Only an embedded EXIF thumbnail needs turning; full images are rotated by the viewer.
     if (!d.preview_is_thumbnail) return "";
     return { 3: "rotate(180deg)", 6: "rotate(90deg)", 8: "rotate(-90deg)" }[d.orientation] ?? "";
   }
 
+  /** Browse… for the log folder (optional; empty = no log). */
   async function browseLog() {
     const picked = await open({ directory: true, multiple: false, defaultPath: logFolder || undefined, title: "Select log folder" });
     if (typeof picked === "string") logFolder = picked;
   }
 
+  /** Browse… for the backup folder (must be outside the photo folder; Rust checks this). */
   async function browseBackup() {
     const picked = await open({ directory: true, multiple: false, defaultPath: backupFolder || undefined, title: "Select backup folder" });
     if (typeof picked === "string") backupFolder = picked;
   }
 
+  /** Search Nominatim for the typed place (only on Enter/Find, per its usage policy) and show the results. */
   async function find(e: Event) {
     e.preventDefault();
     const q = query.trim();
@@ -448,6 +468,7 @@
   let results = $state<ApplyResult | null>(null);
   let showInfo = $state(true);
 
+  /** Build the ApplyRequest sent to Rust from the current screen settings. */
   function request(dryRun: boolean) {
     return {
       root,
@@ -464,6 +485,7 @@
     };
   }
 
+  /** Run Preview (dryRun) or Apply in Rust, showing progress, then the results panel and a summary in the status bar. */
   async function runApply(dryRun: boolean) {
     busy = true;
     progress = null;
@@ -494,10 +516,12 @@
     }
   }
 
+  /** Preview: a dry run that changes nothing. */
   function preview() {
     runApply(true);
   }
 
+  /** Apply: confirm the settings with the user first, then write. */
   async function apply() {
     const lines = [
       `Update ${toWrite} photo${toWrite === 1 ? "" : "s"}?`,
@@ -515,6 +539,7 @@
     if (ok) runApply(false);
   }
 
+  /** Last part of a path (works with / and \\ separators). */
   function fileName(path: string) {
     return path.split(/[\\/]/).pop() ?? path;
   }
