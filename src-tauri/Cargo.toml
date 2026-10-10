@@ -1,8 +1,10 @@
 [package]
 name = "bulk-geotag"
 version = "1.2.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Add GPS location and date taken to photos, in bulk or one at a time"
+authors = ["André Basel"]
+license = "MIT"
+repository = "https://github.com/ZuluPilgrim/bulk-geotag"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

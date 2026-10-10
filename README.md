@@ -118,6 +118,10 @@ rsvg-convert -w 1024 -h 1024 app-icon.svg -o app-icon.png
 npm run tauri icon app-icon.png
 ```
 
+## Licence
+
+[MIT](LICENSE) © 2026 André Basel. Free to use, copy, modify and share, including commercially, as long as the copyright notice is kept.
+
 ## Credits
 
 - Map data and place search © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), via the [Nominatim](https://nominatim.org) service. The app follows the [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/).
