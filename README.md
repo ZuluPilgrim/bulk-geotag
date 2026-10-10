@@ -58,6 +58,8 @@ To build the packages yourself instead, see *Building packages* below.
 - [User Guide](docs/USER_GUIDE.md): how to use the app
 - [Architecture](docs/ARCHITECTURE.md): how it is built, for developers
 - [Changelog](CHANGELOG.md): what changed in each version
+- [Releasing](docs/RELEASING.md): step-by-step guide to publishing a new version
+- [Release Claude Skill](docs/Bulk_Geotag_release_claude_skill.md): the same process as a Claude Skill (`bulk-geotag-release`)
 - [Development time](docs/DEVELOPMENT_TIME.md): how long it took to build, start to finish
 
 ## Quick start (development)
@@ -99,7 +101,7 @@ Takes ~5–10 minutes. Output in `src-tauri/target/release/bundle/`: `deb/`, `rp
 
 **macOS** works the same way (`.github/workflows/release-macos.yml`, `gh workflow run "Release (macOS)" -f tag=<tag>`): one universal `.dmg` for Apple Silicon and Intel, ~10 min. **Not tested on a Mac.** After the Windows and macOS runs, regenerate `SHA256SUMS.txt` so it covers every file.
 
-To publish the Linux packages to a release (renamed without spaces, plus checksums):
+For the full release process (version bump, tags, Windows/macOS builds, checksums, notes) see **[docs/RELEASING.md](docs/RELEASING.md)**. In short, to publish the Linux packages to a release (renamed without spaces, plus checksums):
 
 ```bash
 V=1.2.0; TAG=v1.2-packaged; B=src-tauri/target/release/bundle
