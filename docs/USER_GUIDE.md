@@ -8,6 +8,8 @@ Bulk GeoTag adds a GPS location and/or a date taken to every photo in a folder. 
 2. [Tagging a folder, step by step](#tagging-a-folder-step-by-step)
    - [Single file update](#single-file-update)
 3. [Options explained](#options-explained)
+   - [File dates and sync tools](#file-dates-and-sync-tools): which dates photo apps and sync tools use
+   - [Setting the date taken](#setting-the-date-taken)
 4. [Reading the results](#reading-the-results)
 5. [The log file](#the-log-file)
 6. [Backups and restoring a photo](#backups-and-restoring-a-photo)
@@ -110,7 +112,45 @@ Always skipped, whatever the options:
 
 ### File dates and sync tools
 
-Sync and backup tools such as OneDrive, Dropbox, Google Drive and rsync often decide whether a file has changed by looking at its **modified date**. If the date stays the same, they may never upload the tagged photo. **Update file modified date** is off by default, and resets to off each time the app starts, so tick it for synced folders.
+A photo has two separate sets of dates, and different programs look at different ones:
+
+- **EXIF dates** are stored **inside** the photo, usually by the camera: *Date Taken* (DateTimeOriginal), *Digitized* (CreateDate) and *Modified* (DateTime). They travel with the photo wherever it is copied, emailed or uploaded.
+- **File dates** are kept by the computer's file system, **outside** the photo: *modified*, *accessed* and *created*. File managers show these, and they can change when a file is copied, saved or synced.
+
+Bulk GeoTag writes the EXIF *Date Taken* only if you set one. It changes the file *modified* date only if **Update file modified date** is ticked.
+
+#### How photo apps order the timeline
+
+Photo managers such as Google Photos, Apple Photos, Windows Photos, OneDrive's Photos view, Lightroom, Immich and digiKam place each photo on their timeline by its EXIF **Date Taken**. When a photo has one, its file dates don't matter. So:
+
+- **Setting a date taken** is what moves a photo to the right place on the timeline.
+- **Updating the file modified date does not** move a photo that has a date taken.
+- Photos **without** a date taken (scanned prints, screenshots, pictures saved from the web or messaging apps) fall back to a file date or the upload date in most apps. That's why such photos often turn up on the wrong day, for example the day they were copied. Setting a date taken fixes them in place.
+- Many apps read the date and location **once, when the photo is first added**. A photo that was already in the library may need a rescan or re-import before the change shows. For example, in Lightroom Classic use *Metadata → Read Metadata from Files*.
+
+The location works the same way: map and *Places* views read the GPS stored in the EXIF.
+
+#### How sync and backup tools notice changes
+
+OneDrive, Dropbox, Google Drive, iCloud Drive, rsync and most backup programs don't look at EXIF at all. They decide whether a file has changed mainly from its file **modified date** and **size**; some also compare the content.
+
+- **Update file modified date off:** the photo's content has changed but its modified date hasn't. A tool that relies on the date may decide nothing changed and never upload the tagged photo, so the cloud or backup copy stays untagged. rsync's normal quick check (size + modified date) is a clear case: overwriting a date taken can leave the size unchanged, so rsync skips the file.
+- **Update file modified date on:** the modified date becomes the time of tagging, so sync and backup tools see a changed file and upload it.
+
+If a photo was already uploaded by a camera-upload feature (Google Photos backup, OneDrive camera roll), the tagged version may arrive as a **second copy** instead of replacing the first. Check the app after a large run.
+
+#### Which to use
+
+| You want… | Do this |
+|---|---|
+| Photos in the right place on the timeline | Set a **Date taken** (tick *Overwrite existing date taken* if they already have a wrong one) |
+| OneDrive, Dropbox, Google Drive or a backup tool to pick up the tagged photos | Tick **Update file modified date** |
+| File managers to keep showing the original dates (folder isn't synced) | Leave **Update file modified date** off |
+| Photos with **no** date taken, in a synced folder | Tick **Update file modified date** *and* set a **Date taken**. Otherwise apps that fall back to the file date may move those photos to the day you tagged them. |
+
+**Update file modified date** is off by default, and resets to off each time the app starts, so tick it deliberately for synced folders.
+
+#### What happens to each date
 
 | Date | Update file modified date **on** | **off** |
 |---|---|---|
@@ -120,10 +160,6 @@ Sync and backup tools such as OneDrive, Dropbox, Google Drive and rsync often de
 | EXIF *Modified* (DateTime, inside the photo) | Set to the time of tagging whenever the photo's EXIF is changed | Same |
 | Folder *modified* | Changes | Changes |
 | *Created* / birth time (e.g. Windows "Date created") | Becomes the time of tagging | Becomes the time of tagging |
-
-Photo apps such as Lightroom, Google Photos, Immich and digiKam sort by EXIF *Date Taken*, which is only changed when you set one.
-
-Leave the option **off** for folders that aren't synced, so file managers keep showing the original dates.
 
 ---
 
