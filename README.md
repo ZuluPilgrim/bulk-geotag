@@ -4,7 +4,7 @@ A desktop app for adding GPS location and/or a date taken to a whole folder of p
 
 Select a folder, type a place name (or click the map), confirm the spot, optionally set a date taken, and Bulk GeoTag writes them into every photo's EXIF data. It can back up the originals first and log anything it had to skip.
 
-![Bulk GeoTag: folder and location settings on the left, map with the selected spot on the right](docs/images/screenshot.png)
+![Bulk GeoTag: folder, location and backup settings on the left, map with place-search results on the right](docs/images/screenshot.png)
 
 Built with [Tauri 2](https://tauri.app) (Rust) and [Svelte](https://svelte.dev), with maps and place search from [OpenStreetMap](https://www.openstreetmap.org).
 
@@ -18,6 +18,7 @@ Built with [Tauri 2](https://tauri.app) (Rust) and [Svelte](https://svelte.dev),
 - **Safe writing**: each photo is written to a temporary copy, checked, and only then swapped in. Camera data (make, model, orientation) is kept, and the date taken is only changed if you set one. The EXIF *Modified* stamp is set to the time of the change. The file's modified date is kept by default. Tick *Update file modified date* to change it, so OneDrive and other sync tools upload the tagged photos.
 - **Optional backups**: originals are copied first into a backup folder that mirrors their full path.
 - **Optional CSV log**: errors and warnings (skipped files, backup notices) go to a timestamped log file.
+- **? Help**: the User Guide inside the app (or press F1), working offline.
 - **⚙ Settings**: contact email, Nominatim server, search language, results per search, clear the search cache.
 - **Remembers** the last mode, the photo, backup and log folders, and the map position.
 

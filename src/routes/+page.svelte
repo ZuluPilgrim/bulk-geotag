@@ -1,9 +1,13 @@
 <script lang="ts">
-  import { onMount, untrack } from "svelte";
+  import { onMount, untrack, tick } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { open, ask } from "@tauri-apps/plugin-dialog";
   import { listen } from "@tauri-apps/api/event";
-  import { revealItemInDir } from "@tauri-apps/plugin-opener";
+  import { revealItemInDir, openUrl } from "@tauri-apps/plugin-opener";
+  import { getVersion } from "@tauri-apps/api/app";
+  import { Marked } from "marked";
+  import { gfmHeadingId } from "marked-gfm-heading-id";
+  import guideMd from "../../docs/USER_GUIDE.md?raw";
   import "leaflet/dist/leaflet.css";
   import type { Map as LMap, Marker } from "leaflet";
 
@@ -598,17 +602,82 @@
     }
   }
 
+  // ---------- ? Help: the User Guide, built into the app so it works offline ----------
+  const REPO_URL = "https://github.com/ZuluPilgrim/bulk-geotag";
+  /** Pictures in docs/images/, built into the app so the guide's images also show offline. */
+  const guideImages = import.meta.glob("../../docs/images/*.{png,jpg,jpeg,webp}", {
+    eager: true,
+    query: "?url",
+    import: "default",
+  }) as Record<string, string>;
+  /**
+   * docs/USER_GUIDE.md as HTML. Headings get GitHub-style ids so the Contents links work, and
+   * image links like images/screenshot.png are pointed at the built-in copies above.
+   */
+  const guideHtml = new Marked(gfmHeadingId(), {
+    walkTokens(token) {
+      if (token.type === "image" && !/^https?:/.test(token.href)) {
+        token.href = guideImages[`../../docs/${token.href}`] ?? token.href;
+      }
+    },
+  }).parse(guideMd, { async: false }) as string;
+
+  let helpOpen = $state(false);
+  let helpBody = $state<HTMLElement | null>(null);
+  let appVersion = $state("");
+
+  /** Open Help at the top, or at one section's heading id (e.g. "file-dates-and-sync-tools"). */
+  async function openHelp(anchor?: string) {
+    helpOpen = true;
+    if (!appVersion) appVersion = await getVersion().catch(() => "");
+    await tick();
+    const target = anchor ? helpBody?.querySelector(`#${CSS.escape(anchor)}`) : null;
+    if (target) target.scrollIntoView();
+    else helpBody?.scrollTo(0, 0);
+  }
+
+  /** Links inside the guide: #anchors scroll within Help; anything else opens in the system browser. */
+  function onHelpClick(e: MouseEvent) {
+    const a = (e.target as HTMLElement).closest("a");
+    if (!a) return;
+    e.preventDefault();
+    const href = a.getAttribute("href") ?? "";
+    if (href.startsWith("#")) {
+      helpBody
+        ?.querySelector(`#${CSS.escape(decodeURIComponent(href.slice(1)))}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      // Relative links (e.g. ARCHITECTURE.md) point at the docs folder on GitHub.
+      const url = /^(https?:|mailto:)/.test(href) ? href : `${REPO_URL}/blob/main/docs/${href}`;
+      openUrl(url).catch((err) => (status = `Could not open link: ${err}`));
+    }
+  }
+
+  /** Esc closes the top dialog (Help, then Settings); F1 opens Help. */
+  function onKey(e: KeyboardEvent) {
+    if (e.key === "Escape") {
+      if (helpOpen) helpOpen = false;
+      else if (settingsOpen) settingsOpen = false;
+    } else if (e.key === "F1") {
+      e.preventDefault();
+      openHelp();
+    }
+  }
+
   /** Last part of a path (works with / and \\ separators). */
   function fileName(path: string) {
     return path.split(/[\\/]/).pop() ?? path;
   }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === "Escape" && settingsOpen && (settingsOpen = false)} />
+<svelte:window onkeydown={onKey} />
 
 <div class="app">
   <aside class="panel">
-    <button type="button" class="gear" onclick={openSettings} title="Settings" aria-label="Settings">⚙</button>
+    <div class="corner-buttons">
+      <button type="button" class="gear" onclick={() => openHelp()} title="Help (F1)" aria-label="Help">?</button>
+      <button type="button" class="gear" onclick={openSettings} title="Settings" aria-label="Settings">⚙</button>
+    </div>
     <section>
       <h2>Photos</h2>
       <div class="modes">
@@ -838,6 +907,24 @@
     </div>
   {/if}
 
+  {#if helpOpen}
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <div class="modal-backdrop" onclick={() => (helpOpen = false)}>
+      <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+      <div class="modal help" role="dialog" aria-label="User Guide" tabindex="-1" onclick={(e) => e.stopPropagation()}>
+        <header>
+          <strong>User Guide</strong>
+          <span class="meta">Bulk GeoTag {appVersion}</span>
+          <button type="button" class="gear close" onclick={() => (helpOpen = false)} title="Close (Esc)" aria-label="Close">✕</button>
+        </header>
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+        <div class="help-body" bind:this={helpBody} onclick={onHelpClick}>
+          {@html guideHtml}
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <footer class="status">
     {#if progress}
       <progress max={progress[1] || 1} value={progress[0]}></progress>
@@ -894,10 +981,14 @@
     overflow-y: auto;
     padding: 4px 16px 16px;
   }
-  .gear {
+  .corner-buttons {
     position: absolute;
     top: 8px;
     right: 10px;
+    display: flex;
+    gap: 2px;
+  }
+  .gear {
     padding: 2px 7px;
     font-size: 16px;
     line-height: 1.2;
@@ -927,6 +1018,108 @@
     border-radius: 10px;
     padding: 16px 18px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  }
+  /* ---------- ? Help ---------- */
+  .modal.help {
+    width: min(860px, calc(100vw - 32px));
+    height: calc(100vh - 48px);
+    max-height: none;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+  }
+  .modal.help header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: 10px 12px 10px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .help header .close {
+    margin-left: auto;
+  }
+  .help-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 24px 24px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .help-body :global(h1) {
+    font-size: 20px;
+  }
+  .help-body :global(h2) {
+    font-size: 17px;
+    margin-top: 22px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .help-body :global(h3) {
+    font-size: 15px;
+    margin-top: 18px;
+  }
+  .help-body :global(h4) {
+    font-size: 14px;
+    margin-top: 14px;
+  }
+  .help-body :global(:is(h1, h2, h3, h4)) {
+    scroll-margin-top: 8px;
+  }
+  .help-body :global(a) {
+    color: var(--accent);
+  }
+  .help-body :global(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 8px 0 14px;
+    font-size: 13px;
+  }
+  .help-body :global(:is(th, td)) {
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+  .help-body :global(th) {
+    background: color-mix(in srgb, var(--muted) 10%, transparent);
+  }
+  .help-body :global(code) {
+    font-family: ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace;
+    font-size: 0.92em;
+  }
+  .help-body :global(:not(pre) > code) {
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--muted) 12%, transparent);
+  }
+  .help-body :global(pre) {
+    overflow-x: auto;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.25;
+    background: color-mix(in srgb, var(--muted) 10%, transparent);
+  }
+  .help-body :global(img) {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 10px 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .help-body :global(blockquote) {
+    margin: 8px 0;
+    padding: 2px 12px;
+    border-left: 3px solid var(--border);
+    color: var(--muted);
+  }
+  .help-body :global(hr) {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 18px 0;
   }
   .modal header {
     margin-bottom: 6px;

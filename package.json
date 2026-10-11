@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "prepare": "svelte-kit sync || echo ''",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:guide": "node scripts/check-guide-anchors.mjs",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri"
   },
@@ -18,7 +19,9 @@
     "@tauri-apps/plugin-dialog": "^2.8.1",
     "@tauri-apps/plugin-opener": "^2",
     "@types/leaflet": "^1.9.22",
-    "leaflet": "^1.9.4"
+    "leaflet": "^1.9.4",
+    "marked": "^18.1.0",
+    "marked-gfm-heading-id": "^4.1.4"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.10",

@@ -43,7 +43,8 @@ flowchart LR
 bulk-geotag/
 ├── README.md
 ├── docs/
-│   ├── USER_GUIDE.md
+│   ├── USER_GUIDE.md            ← also shown in the app by ? Help
+│   ├── images/                  ← pictures for the docs (built into the app too)
 │   └── ARCHITECTURE.md          ← this file
 ├── package.json                 ← frontend deps + scripts (npm run tauri dev)
 ├── svelte.config.js             ← adapter-static; css: "injected" (see Gotchas)
@@ -174,6 +175,7 @@ on any failure: delete temp, original untouched
 - **Dialogs:** `@tauri-apps/plugin-dialog`, with `open({directory:true})` for folders and `ask()` for the Apply confirmation.
 - **Mode:** `mode` is `"bulk" | "single"`; `root` is the folder or the file. In single mode, `inspect_photo` fills `details`, pre-fills lat/lon and date, and `atCurrent` (pin within 1e-5° of the photo's GPS) drives the pin colour: grey `at-current` while there, red once moved, plus a non-interactive grey `currentMarker` at the photo's GPS.
 - **Settings dialog:** ⚙ button (`.gear`) opens a modal; `get_settings` fills a `draft`, Save calls `save_settings` and shows Rust's validation message on failure. *Show in folder* uses `revealItemInDir` from `@tauri-apps/plugin-opener` (allowed by `opener:default`).
+- **? Help:** `docs/USER_GUIDE.md` is imported with Vite's `?raw`, so its text is built into the app at build time (no Tauri resource, no Rust command, works offline). `marked` with `marked-gfm-heading-id` turns it into HTML once, with GitHub-style heading ids so the guide's Contents links match. Pictures in `docs/images/` are imported with `import.meta.glob(…, { query: "?url" })`, and a `walkTokens` hook points the guide's `images/…` links at the built-in copies. The HTML is shown with `{@html}` (safe: it comes only from our own file at build time) in a `.modal.help`; its styles use `.help-body :global(…)`. One click handler on the body scrolls `#anchor` links within the panel and opens anything else with `openUrl` (relative links go to the file on GitHub). `?` (`.corner-buttons`, next to ⚙) or F1 opens it; Esc closes Help first, then Settings.
 - **Remembered settings:** `localStorage` key `bulk-geotag.settings.v1` holds the mode, folder, backup on/off, backup folder, log folder and map centre/zoom. Every access is wrapped in try/catch.
 
 ## Dependencies
@@ -189,12 +191,14 @@ on any failure: delete temp, original untouched
 | `chrono` | Local time for log names and lines |
 | `base64` | Preview images for single-file mode |
 | `leaflet` | Map |
+| `marked`, `marked-gfm-heading-id` | User Guide → HTML for ? Help |
 | `svelte`, `@sveltejs/kit`, `adapter-static`, `vite` | Frontend |
 
 ## Testing
 
 ```bash
 npm run check                       # svelte-check + TypeScript
+npm run check:guide                 # User Guide: Contents links and images
 cd src-tauri && cargo test --lib    # 15 unit tests
 ```
 
@@ -242,6 +246,7 @@ ls -la --time-style=+'%F %T'
 - **little_exif needs the file extension** to detect the format, which is why the temp file keeps it.
 - **TIFFs without `XResolution`** are refused by little_exif. Real camera and scanner TIFFs have it.
 - **Folder chooser button label:** rfd (behind the dialog plugin) doesn't pass an accept label to the xdg portal, so Linux shows "Open". Titles say "Select …".
+- **Renaming a User Guide heading** changes its id and breaks Contents links (and any `openHelp("…")` call) that point at it. Run `npm run check:guide` after editing the guide.
 - **Separate storage:** the dev server (`http://localhost:1420`) and the bundled app have different web-view origins, so their `localStorage` (remembered settings) is separate.
 
 ## Ideas / roadmap

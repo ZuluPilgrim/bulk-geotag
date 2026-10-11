@@ -3,6 +3,16 @@
 All notable changes to Bulk GeoTag. Dates are NZ local time.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-10-11
+
+### Added
+- **In-app help:** the User Guide opens inside the app with the **?** button (next to ⚙) or **F1**. It works offline: the guide and its pictures are built into the app. Contents links jump within the guide; web links open in the system browser. Esc, ✕ or clicking outside closes it.
+- Screenshot in the User Guide's *The screen at a glance*, replacing the text diagram. The README uses the same, updated screenshot.
+- `npm run check:guide`: checks that every Contents link in the User Guide matches a heading and every image exists.
+
+### Changed
+- User Guide: *File dates and sync tools* now explains how photo apps order their timeline (EXIF date taken) and how OneDrive and other sync tools notice changes (file modified date), with a *Which to use* table.
+
 ## [1.2.0] - 2026-10-10
 
 ### Added

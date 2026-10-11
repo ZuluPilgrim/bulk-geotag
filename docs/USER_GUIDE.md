@@ -22,33 +22,12 @@ Bulk GeoTag adds a GPS location and/or a date taken to every photo in a folder. 
 
 ## The screen at a glance
 
-```
-┌─────────────────────────┬─────────────────────────────────────┐
-│ PHOTOS               ⚙  │                                     │
-│  ◉ Bulk  ○ Single file  │                                     │
-│  Folder  [ … ][Browse…] │                                     │
-│  ☐ Include subfolders   │                                     │
-│  ☐ Overwrite existing   │              Map                    │
-│  ☐ Update file modified │                                     │
-│  57 photos · 12 have GPS│   numbered circles = search results │
-│ LOCATION                │   red pin = the spot to be written  │
-│  [ place name ][Find]   │                                     │
-│  ◉ 1 Result one         │                                     │
-│  Lat [   ]  Lon [   ] ✕ │                                     │
-│ DATE TAKEN              │                                     │
-│  [date 📅] [time  ]  ✕  │                                     │
-│  ☐ Overwrite existing   │                                     │
-│ BACKUP                  │                                     │
-│  ☐ Back up originals    │                                     │
-│  Backup to [ … ][Browse]│                                     │
-│ LOG                     │                                     │
-│  Write to [ … ][Browse] │                                     │
-│ [Preview] [Apply to 45] │                                     │
-├─────────────────────────┴─────────────────────────────────────┤
-│ Status bar: progress, results, log file name                  │
-└───────────────────────────────────────────────────────────────┘
-```
+![Bulk GeoTag: photo folder, place search, date taken, backup and log on the left; map with the search results on the right](images/screenshot.png)
 
+- **Left panel**, top to bottom: **Photos** (mode, folder, scope options and the photo count), **Location** (place search and its results, Lat/Lon), **Date taken**, **Backup**, **Log**, then **Preview** and **Apply** at the bottom (scroll down if the window is short).
+- **?** and **⚙** at the top-right of the left panel open this guide (or press **F1**) and the [Settings](#settings-and-place-search).
+- **Map** on the right: numbered circles are search results, and the red pin is the spot that will be written.
+- **Status bar** along the bottom: progress, results and the log file name.
 - **Blue** buttons pick folders or apply changes. **Green** Preview is a safe dry run.
 - Buttons fade out when they can't be used yet. Apply needs a folder, a location and/or a date taken, and a backup folder if backup is ticked.
 
