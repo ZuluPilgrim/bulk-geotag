@@ -2,7 +2,7 @@
 name = "bulk-geotag"
 version = "1.3.0"
 description = "Add GPS location and date taken to photos, in bulk or one at a time"
-authors = ["André Basel"]
+authors = ["ZuluPilgrim"]
 license = "MIT"
 repository = "https://github.com/ZuluPilgrim/bulk-geotag"
 edition = "2024"

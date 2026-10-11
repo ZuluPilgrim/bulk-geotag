@@ -40,8 +40,8 @@
     "category": "Photography",
     "shortDescription": "Add GPS location and date taken to photos, in bulk or one at a time",
     "longDescription": "Bulk GeoTag writes GPS coordinates and an optional date taken into the EXIF data of JPEG, TIFF and WebP photos. Pick a place by search (OpenStreetMap) or on the map, preview the changes, and apply them to a whole folder or a single photo, with optional backups and a CSV log.",
-    "publisher": "André Basel",
-    "copyright": "© 2026 André Basel",
+    "publisher": "ZuluPilgrim",
+    "copyright": "© 2026 ZuluPilgrim",
     "homepage": "https://github.com/ZuluPilgrim/bulk-geotag"
   },
   "mainBinaryName": "bulk-geotag"

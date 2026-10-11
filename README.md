@@ -123,7 +123,7 @@ npm run tauri icon app-icon.png
 
 ## Licence
 
-[MIT](LICENSE) © 2026 André Basel. Free to use, copy, modify and share, including commercially, as long as the copyright notice is kept.
+[MIT](LICENSE) © 2026 ZuluPilgrim. Free to use, copy, modify and share, including commercially, as long as the copyright notice is kept.
 
 ## Credits
 
