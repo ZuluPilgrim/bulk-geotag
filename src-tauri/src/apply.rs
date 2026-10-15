@@ -327,9 +327,20 @@ pub(crate) fn read_exif(path: &Path) -> Result<Option<exif::Exif>, String> {
     }
 }
 
+/// A camera tag as text for the before/after comparison. Text tags are compared by what they
+/// say: some cameras pad them with NULs or spaces to a fixed length ("COACH 1.0\0\0\0…"),
+/// and that padding isn't kept when the EXIF is rewritten, which is fine.
 fn tag_text(data: Option<&exif::Exif>, tag: exif::Tag) -> Option<String> {
-    data.and_then(|d| d.get_field(tag, exif::In::PRIMARY))
-        .map(|f| f.display_value().to_string())
+    let f = data.and_then(|d| d.get_field(tag, exif::In::PRIMARY))?;
+    Some(match &f.value {
+        exif::Value::Ascii(parts) => parts
+            .iter()
+            .map(|p| String::from_utf8_lossy(p).trim_matches(|c: char| c == '\0' || c.is_whitespace()).to_string())
+            .filter(|p| !p.is_empty())
+            .collect::<Vec<_>>()
+            .join(" "),
+        _ => f.display_value().to_string(),
+    })
 }
 
 /// EXIF date tag as "YYYY:MM:DD HH:MM:SS" (raw text, so it compares exactly).
@@ -474,6 +485,34 @@ pub fn tag_photo(path: &Path, changes: Changes, keep_dates: bool) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Old cameras (here a Zoran-based one) pad Make/Model with NULs to 32 bytes. The rewrite
+    /// drops the padding; that must not count as "camera data would have changed".
+    #[test]
+    fn tags_photo_with_nul_padded_make_and_model() {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("test-data/padded-strings.jpg");
+        let dir = std::env::temp_dir().join(format!("bgt-padded-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let photo = dir.join("PICT0003.JPG");
+        fs::copy(&src, &photo).unwrap();
+
+        tag_photo(&photo, Changes { gps: Some((-29.306351, 29.975186)), date: None }, true).unwrap();
+
+        let after = read_exif(&photo).unwrap().unwrap();
+        assert_eq!(tag_text(Some(&after), exif::Tag::Make).as_deref(), Some("Zoran Corporation"));
+        assert_eq!(tag_text(Some(&after), exif::Tag::Model).as_deref(), Some("COACH 1.0"));
+        assert!(after.get_field(exif::Tag::Orientation, exif::In::PRIMARY).is_some());
+        assert!(after.get_field(exif::Tag::Orientation, exif::In::THUMBNAIL).is_some(), "thumbnail's orientation kept");
+        assert!(crate::inspect::embedded_thumbnail(&after).is_some(), "embedded thumbnail kept");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn text_tags_compare_without_padding() {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("test-data/padded-strings.jpg");
+        let d = read_exif(&src).unwrap().unwrap();
+        assert_eq!(tag_text(Some(&d), exif::Tag::Model).as_deref(), Some("COACH 1.0"));
+    }
 
     /// A photo whose XResolution/YResolution are stored as whole numbers (SLONG)
     /// used to fail with "Illegal format for known tag". It must now tag normally.

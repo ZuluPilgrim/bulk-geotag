@@ -3,6 +3,11 @@
 All notable changes to Bulk GeoTag. Dates are NZ local time.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.5.1] - 2026-10-15
+
+### Fixed
+- Photos from some older cameras (for example Zoran-based compacts that name files `PICT0001.JPG`) were left unchanged with *verification failed: existing camera data would have changed*. Their Make and Model are padded with blank characters to a fixed length; the check now compares what the text says, so these photos tag normally. Make, Model, Orientation and the embedded thumbnail are kept.
+
 ## [1.5.0] - 2026-10-15
 
 ### Added
