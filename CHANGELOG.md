@@ -3,6 +3,12 @@
 All notable changes to Bulk GeoTag. Dates are NZ local time.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.3.1] - 2026-10-15
+
+### Fixed
+- Photos whose EXIF stores a standard tag with the wrong number type (for example darktable exports, which write XResolution as a whole number) were left unchanged with *cannot load existing metadata safely: Illegal format for known tag*. These now tag normally; the affected tags keep their values and are stored with the correct type. Nothing else in the EXIF changes.
+- Help in `npm run tauri dev`: the User Guide and its screenshot were blocked by Vite's file-serving rules. Installed builds were not affected.
+
 ## [1.3.0] - 2026-10-11
 
 ### Added
