@@ -1,4 +1,5 @@
 mod apply;
+mod exif_repair;
 mod geocode;
 mod inspect;
 mod log;

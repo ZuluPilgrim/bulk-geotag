@@ -11,6 +11,7 @@
 //!   6. rename the temp file over the original (atomic on the same drive)
 //! Any failure removes the temp file and leaves the original untouched.
 
+use crate::exif_repair;
 use crate::scan::{self, GpsState};
 use chrono::{Local, NaiveDateTime};
 use little_exif::exif_tag::ExifTag;
@@ -359,6 +360,29 @@ fn temp_path(path: &Path) -> Result<PathBuf, String> {
     Ok(dir.join(format!(".{stem}.bulkgeotag-tmp.{ext}")))
 }
 
+/// Load the temp copy's existing EXIF for editing. Some cameras and editors store a
+/// standard tag with the wrong number type (e.g. XResolution as a whole number);
+/// little_exif rejects those, so they are retyped first (see exif_repair.rs).
+fn load_metadata(temp: &Path, original: &exif::Exif) -> Result<Metadata, String> {
+    let e = match Metadata::new_from_path(temp) {
+        Ok(md) => return Ok(md),
+        Err(e) => e.to_string(),
+    };
+    let fail = |e: &str| format!("cannot load existing metadata safely: {e}");
+    if !exif_repair::is_bad_type_error(&e) {
+        return Err(fail(&e));
+    }
+    let mut bytes = fs::read(temp).map_err(|e| format!("cannot read temp copy: {e}"))?;
+    let repairs = exif_repair::neutralise(&mut bytes, original.buf());
+    if repairs.is_empty() {
+        return Err(fail(&e));
+    }
+    fs::write(temp, &bytes).map_err(|e| format!("cannot write temp copy: {e}"))?;
+    let mut md = Metadata::new_from_path(temp).map_err(|e| fail(&e.to_string()))?;
+    exif_repair::restore(&mut md, repairs);
+    Ok(md)
+}
+
 /// Write `changes` into one photo. `keep_dates`: restore the file's original modified/accessed times.
 pub fn tag_photo(path: &Path, changes: Changes, keep_dates: bool) -> Result<(), String> {
     let original = read_exif(path)?;
@@ -371,10 +395,9 @@ pub fn tag_photo(path: &Path, changes: Changes, keep_dates: bool) -> Result<(), 
     let result = (|| -> Result<(), String> {
         fs::copy(path, &temp).map_err(|e| format!("cannot create temp copy: {e}"))?;
 
-        let mut md = if original.is_some() {
-            Metadata::new_from_path(&temp).map_err(|e| format!("cannot load existing metadata safely: {e}"))?
-        } else {
-            Metadata::new()
+        let mut md = match &original {
+            Some(o) => load_metadata(&temp, o)?,
+            None => Metadata::new(),
         };
         if let Some((lat, lon)) = changes.gps {
             md.set_tag(ExifTag::GPSVersionID(vec![2, 3, 0, 0]));
@@ -451,6 +474,26 @@ pub fn tag_photo(path: &Path, changes: Changes, keep_dates: bool) -> Result<(), 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A photo whose XResolution/YResolution are stored as whole numbers (SLONG)
+    /// used to fail with "Illegal format for known tag". It must now tag normally.
+    #[test]
+    fn tags_photo_with_badly_typed_resolution() {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("test-data/bad-xresolution.jpg");
+        let dir = std::env::temp_dir().join(format!("bgt-test-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let photo = dir.join("bad-xresolution.jpg");
+        fs::copy(&src, &photo).unwrap();
+
+        tag_photo(&photo, Changes { gps: Some((-36.8485, 174.7633)), date: None }, true).unwrap();
+
+        let after = read_exif(&photo).unwrap().unwrap();
+        let lat = read_coord(&after, exif::Tag::GPSLatitude, exif::Tag::GPSLatitudeRef).unwrap();
+        assert!((lat + 36.8485).abs() < 1e-5);
+        let xres = after.get_field(exif::Tag::XResolution, exif::In::PRIMARY).unwrap();
+        assert!(matches!(&xres.value, exif::Value::Rational(r) if r[0].to_f64() == 72.0));
+        fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn backup_mirrors_full_path() {

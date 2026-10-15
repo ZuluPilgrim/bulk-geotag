@@ -16,6 +16,8 @@ export default defineConfig(() => ({
   server: {
     port: 1420,
     strictPort: true,
+    // 4. the in-app User Guide and its images are imported from docs/
+    fs: { allow: ["docs"] },
     host: host || "127.0.0.1",
     hmr: host
       ? {
