@@ -5,6 +5,7 @@
   import { listen } from "@tauri-apps/api/event";
   import { revealItemInDir, openUrl } from "@tauri-apps/plugin-opener";
   import { getVersion } from "@tauri-apps/api/app";
+  import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { Marked } from "marked";
   import { gfmHeadingId } from "marked-gfm-heading-id";
   import guideMd from "../../docs/USER_GUIDE.md?raw";
@@ -23,6 +24,7 @@
     logFolder?: string;
     mapCenter?: [number, number];
     mapZoom?: number;
+    exifCollapsed?: boolean;
   };
   const STORE_KEY = "bulk-geotag.settings.v1";
   /** Read remembered settings from browser storage ({} if none, or storage is unavailable). */
@@ -58,12 +60,37 @@
     lon: number | null;
     date_taken: string | null; // "YYYY-MM-DD HH:MM:SS"
     camera: string | null;
+    lens: string | null;
+    exposure: string | null; // "1/250 s"
+    aperture: string | null; // "f/2.8"
+    iso: number | null;
+    focal_length: string | null; // "35 mm (53 mm equiv.)"
+    dimensions: string | null; // "6240 × 4160"
+    software: string | null;
     orientation: number;
     preview: string | null;
     preview_is_thumbnail: boolean;
     issue: string | null;
   };
   let details = $state<PhotoDetails | null>(null);
+  // Single-file mode: the photo's details card in the corner of the map, folded down to its title bar.
+  let exifCollapsed = $state(saved.exifCollapsed ?? false);
+  /** The card's rows after GPS and Date taken; empty values are left out. */
+  let exifRows = $derived.by(() => {
+    const d = details;
+    if (!d) return [];
+    const shot = [d.exposure, d.aperture, d.iso ? `ISO ${d.iso}` : null].filter(Boolean).join(" · ");
+    return (
+      [
+        ["Camera", d.camera],
+        ["Lens", d.lens],
+        ["Exposure", shot],
+        ["Focal length", d.focal_length],
+        ["Size", d.dimensions],
+        ["Software", d.software],
+      ] as [string, string | null][]
+    ).filter(([, v]) => !!v);
+  });
   let includeSubfolders = $state(false);
   let overwriteGps = $state(false);
   // Off by default (keep original dates). Tick it so OneDrive and other sync/backup tools notice the changed photos.
@@ -164,7 +191,7 @@
 
   // Save whenever any remembered setting changes.
   $effect(() => {
-    save({ folder, mode, backupEnabled, backupFolder, logFolder });
+    save({ folder, mode, backupEnabled, backupFolder, logFolder, exifCollapsed });
   });
 
   // ---------- Status ----------
@@ -409,6 +436,63 @@
     if (!d.preview_is_thumbnail) return "";
     return { 3: "rotate(180deg)", 6: "rotate(90deg)", 8: "rotate(-90deg)" }[d.orientation] ?? "";
   }
+
+  // ---------- Drag and drop: a folder or a photo from the file manager ----------
+  let dragging = $state(false); // something is being dragged over the window
+
+  /** A folder switches to bulk mode and scans it; a photo switches to single-file mode and loads it. */
+  async function onDrop(paths: string[]) {
+    if (busy) {
+      status = "Wait for Preview/Apply to finish before dropping something new.";
+      return;
+    }
+    if (paths.length !== 1) {
+      status = "Drop one folder or one photo at a time.";
+      return;
+    }
+    const path = paths[0];
+    let kind: string;
+    try {
+      kind = await invoke<string>("path_kind", { path });
+    } catch (e) {
+      status = `Could not use the dropped item: ${e}`;
+      return;
+    }
+    if (kind === "folder") {
+      setMode("bulk");
+      folder = path;
+      status = `Folder dropped: ${path}`;
+    } else if (kind === "photo" && WRITABLE.test(path)) {
+      setMode("single");
+      filePath = path;
+      await loadDetails(true);
+      status = `Photo dropped: ${fileName(path)}`;
+    } else if (kind === "photo") {
+      status = `${fileName(path)}: this type of photo can't be tagged yet (JPEG, TIFF or WebP only).`;
+    } else if (kind === "other") {
+      status = `${fileName(path)} is not a supported photo (JPEG, TIFF or WebP).`;
+    } else {
+      status = `Not found: ${path}`;
+    }
+  }
+
+  onMount(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    getCurrentWebview()
+      .onDragDropEvent((e) => {
+        const t = e.payload.type;
+        if (t === "enter" || t === "over") dragging = true;
+        else dragging = false;
+        if (t === "drop" && !helpOpen && !settingsOpen) onDrop(e.payload.paths);
+      })
+      .then((fn) => (disposed ? fn() : (unlisten = fn)))
+      .catch(() => {}); // not running inside the app (e.g. plain browser): no drag and drop
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  });
 
   /** Browse… for the log folder (optional; empty = no log). */
   async function browseLog() {
@@ -702,22 +786,7 @@
       <label class="check" title="Lets OneDrive and other sync or backup tools see that the photos changed. Untick to keep each photo's original modified date.">
         <input type="checkbox" bind:checked={updateModified} /> Update file modified date
       </label>
-      {#if mode === "single" && details}
-        <div class="photo-card">
-          {#if details.preview}
-            <img src={details.preview} alt={details.name} style:transform={thumbRotation(details)} />
-          {:else}
-            <div class="no-preview">No preview</div>
-          {/if}
-          <div class="photo-info">
-            <strong title={details.path}>{details.name}</strong>
-            {#if details.camera}<span>{details.camera}</span>{/if}
-            <span>Date taken: {details.date_taken ?? "none"}</span>
-            <span>GPS: {details.lat != null ? `${details.lat.toFixed(5)}, ${details.lon?.toFixed(5)}` : "none"}</span>
-            {#if details.issue}<span class="warn">{details.issue}</span>{/if}
-          </div>
-        </div>
-      {:else if scanning}
+      {#if scanning}
         <p class="meta">Scanning…</p>
       {:else if scan && mode === "bulk"}
         <p class="meta">
@@ -828,6 +897,41 @@
   <div class="mapwrap">
     <main class="map" bind:this={mapEl}></main>
 
+    {#if mode === "single" && details}
+      <div class="exif-card" role="region" aria-label="Photo details">
+        <header>
+          <strong title={details.path}>{details.name}</strong>
+          <button
+            type="button"
+            class="gear"
+            onclick={() => (exifCollapsed = !exifCollapsed)}
+            title={exifCollapsed ? "Show photo details" : "Hide photo details"}
+            aria-expanded={!exifCollapsed}>{exifCollapsed ? "▸" : "▾"}</button
+          >
+        </header>
+        {#if !exifCollapsed}
+          <div class="exif-body">
+            {#if details.preview}
+              <img src={details.preview} alt={details.name} style:transform={thumbRotation(details)} />
+            {:else}
+              <div class="no-preview">No preview</div>
+            {/if}
+            <dl>
+              <dt>GPS</dt>
+              <dd>{details.lat != null ? `${details.lat.toFixed(5)}, ${details.lon?.toFixed(5)}` : "none"}</dd>
+              <dt>Date taken</dt>
+              <dd>{details.date_taken ?? "none"}</dd>
+              {#each exifRows as [label, value] (label)}
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              {/each}
+            </dl>
+            {#if details.issue}<p class="warn">{details.issue}</p>{/if}
+          </div>
+        {/if}
+      </div>
+    {/if}
+
     {#if results}
       <div class="results">
         <header>
@@ -922,6 +1026,12 @@
           {@html guideHtml}
         </div>
       </div>
+    </div>
+  {/if}
+
+  {#if dragging}
+    <div class="drop-hint" aria-hidden="true">
+      <div>Drop a folder to tag all its photos,<br />or one photo to tag just that one</div>
     </div>
   {/if}
 
@@ -1409,40 +1519,94 @@
   .modes .check {
     margin-top: 0;
   }
-  .photo-card {
-    display: flex;
-    gap: 10px;
-    margin-top: 10px;
-    align-items: flex-start;
+  .drop-hint {
+    position: fixed;
+    inset: 0;
+    z-index: 3000; /* above everything, including dialogs */
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border: 3px dashed var(--accent);
   }
-  .photo-card img,
-  .no-preview {
-    width: 96px;
-    height: 72px;
-    object-fit: cover;
-    border-radius: 6px;
+  .drop-hint div {
+    padding: 18px 26px;
+    border-radius: 12px;
+    background: var(--panel);
+    color: var(--text);
+    font-size: 16px;
+    text-align: center;
+    line-height: 1.5;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+  }
+  .exif-card {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: min(290px, calc(100% - 24px));
+    max-height: calc(100% - 24px);
+    z-index: 900; /* above Leaflet panes, below Results and dialogs */
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    color: var(--text);
     border: 1px solid var(--border);
-    flex: none;
+    border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
+    overflow: hidden;
+  }
+  .exif-card header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 6px 6px 12px;
+  }
+  .exif-card header strong {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+  .exif-body {
+    overflow-y: auto;
+    padding: 0 12px 12px;
+    border-top: 1px solid var(--border);
+  }
+  .exif-body img,
+  .no-preview {
+    display: block;
+    width: 100%;
+    height: 170px;
+    margin-top: 10px;
+    object-fit: contain;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--muted) 10%, transparent);
   }
   .no-preview {
     display: grid;
     place-items: center;
-    font-size: 11px;
-    color: var(--muted);
-  }
-  .photo-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
     font-size: 12px;
     color: var(--muted);
-    min-width: 0;
   }
-  .photo-info strong {
-    color: var(--text);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .exif-body dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 3px 10px;
+    margin: 10px 0 0;
+    font-size: 12px;
+  }
+  .exif-body dt {
+    color: var(--muted);
+  }
+  .exif-body dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  .exif-body .warn {
+    font-size: 12px;
+    margin: 8px 0 0;
   }
   :global(.pin.at-current) {
     background: #8a909c;

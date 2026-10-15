@@ -48,6 +48,21 @@ async fn inspect_photo(path: String) -> Result<inspect::PhotoDetails, String> {
         .map_err(|e| format!("inspect task failed: {e}"))?
 }
 
+/// Drag and drop: is a dropped path a folder, a photo the app can read, some other file, or missing?
+#[tauri::command]
+fn path_kind(path: String) -> &'static str {
+    let p = std::path::Path::new(&path);
+    if p.is_dir() {
+        "folder"
+    } else if p.is_file() && scan::is_supported(p) {
+        "photo"
+    } else if p.exists() {
+        "other"
+    } else {
+        "missing"
+    }
+}
+
 /// Everything the ⚙ Settings dialog shows.
 #[derive(serde::Serialize)]
 struct SettingsView {
@@ -99,8 +114,23 @@ pub fn run() {
             inspect_photo,
             get_settings,
             save_settings,
-            clear_search_cache
+            clear_search_cache,
+            path_kind
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::path_kind;
+
+    #[test]
+    fn dropped_paths_are_classified() {
+        let data = concat!(env!("CARGO_MANIFEST_DIR"), "/test-data");
+        assert_eq!(path_kind(data.into()), "folder");
+        assert_eq!(path_kind(format!("{data}/exif-details.jpg")), "photo");
+        assert_eq!(path_kind(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml").into()), "other");
+        assert_eq!(path_kind(format!("{data}/no-such-file.jpg")), "missing");
+    }
 }

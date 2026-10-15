@@ -3,6 +3,16 @@
 All notable changes to Bulk GeoTag. Dates are NZ local time.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-10-15
+
+### Added
+- **Drag and drop:** drop a folder onto the window to switch to *Bulk folder update* and scan it, or one JPEG/TIFF/WebP photo to switch to *Single file update* and open it. A dashed outline shows while dragging; several items, PNGs and other files get a message in the status bar instead. Handy on Linux, where the system's Browse… window has no thumbnail view.
+- **Photo details card on the map** (single-file mode): the preview and the photo's GPS, date taken, camera, lens, exposure · aperture · ISO, focal length (with 35 mm equivalent), size and software, in the map's top-right corner. ▾/▸ folds it; the choice is remembered.
+
+### Changed
+- Single-file mode: the small photo card in the left panel is replaced by the card on the map.
+- User Guide: new *Drag and drop* section, the details card, and troubleshooting entries for drops and the Browse… window.
+
 ## [1.3.1] - 2026-10-15
 
 ### Fixed

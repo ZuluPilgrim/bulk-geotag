@@ -7,6 +7,7 @@ Bulk GeoTag adds a GPS location and/or a date taken to every photo in a folder. 
 1. [The screen at a glance](#the-screen-at-a-glance)
 2. [Tagging a folder, step by step](#tagging-a-folder-step-by-step)
    - [Single file update](#single-file-update)
+   - [Drag and drop](#drag-and-drop): drop a folder or a photo from your file manager
 3. [Options explained](#options-explained)
    - [File dates and sync tools](#file-dates-and-sync-tools): which dates photo apps and sync tools use
    - [Setting the date taken](#setting-the-date-taken)
@@ -26,7 +27,8 @@ Bulk GeoTag adds a GPS location and/or a date taken to every photo in a folder. 
 
 - **Left panel**, top to bottom: **Photos** (mode, folder, scope options and the photo count), **Location** (place search and its results, Lat/Lon), **Date taken**, **Backup**, **Log**, then **Preview** and **Apply** at the bottom (scroll down if the window is short).
 - **?** and **⚙** at the top-right of the left panel open this guide (or press **F1**) and the [Settings](#settings-and-place-search).
-- **Map** on the right: numbered circles are search results, and the red pin is the spot that will be written.
+- **Map** on the right: numbered circles are search results, and the red pin is the spot that will be written. In single-file mode, the photo and its details show in a card at the map's top-right corner.
+- **Drag and drop:** drop a folder or a photo anywhere on the window instead of using Browse… (see [Drag and drop](#drag-and-drop)).
 - **Status bar** along the bottom: progress, results and the log file name.
 - **Blue** buttons pick folders or apply changes. **Green** Preview is a safe dry run.
 - Buttons fade out when they can't be used yet. Apply needs a folder, a location and/or a date taken, and a backup folder if backup is ticked.
@@ -35,7 +37,7 @@ Bulk GeoTag adds a GPS location and/or a date taken to every photo in a folder. 
 
 ## Tagging a folder, step by step
 
-1. **Select the photo folder.** Click **Browse…** next to *Folder*. The app scans it and shows, for example, *57 photos · 12 already have GPS*. Problem files are shown in amber.
+1. **Select the photo folder.** Click **Browse…** next to *Folder*, or [drag the folder onto the window](#drag-and-drop) from your file manager. The app scans it and shows, for example, *57 photos · 12 already have GPS*. Problem files are shown in amber.
 2. **Choose the scope.** Tick **Include subfolders** to include every folder below it. Tick **Overwrite existing GPS** only if you want to replace coordinates that are already there. Tick **Update file modified date** if the photos are in OneDrive, Dropbox, Google Drive or another synced or backed-up folder (see [File dates](#file-dates-and-sync-tools)).
 3. **Set the location.** Type a place in *Location* and press **Enter** or **Find**.
    - If there are several matches, numbered circles appear on the map. Click one in the list or on the map.
@@ -56,16 +58,33 @@ Bulk GeoTag adds a GPS location and/or a date taken to every photo in a folder. 
 
 Choose **Single file update** at the top of *Photos* to work on one photo instead of a folder.
 
-1. Click **Browse…** and pick a photo (`.jpg .jpeg .tif .tiff .webp`). *Include subfolders* is hidden in this mode.
-2. A **photo card** shows a preview, the file name, the camera, and the photo's current **date taken** and **GPS**.
+1. Click **Browse…** and pick a photo (`.jpg .jpeg .tif .tiff .webp`), or [drag the photo onto the window](#drag-and-drop). *Include subfolders* is hidden in this mode.
+2. A **photo details card** appears in the **top-right corner of the map**: a preview, the file name, and what the photo already holds: **GPS**, **date taken**, **camera**, **lens**, **exposure · aperture · ISO**, **focal length** (with the 35 mm equivalent), **size** in pixels and the **software** that last saved it. Details the photo doesn't have are left out. Click **▾** to fold the card down to its title bar (and **▸** to open it again); the app remembers which you chose.
 3. If the photo already has GPS, the map zooms there and the pin is **grey**: that's where the photo is tagged now. **Lat/Lon** and **Date taken** are pre-filled with the photo's current values.
 4. Drag the pin (or click the map, or search) to a new spot. It turns **red**, and a small grey marker stays at the photo's current location for reference. Move it back and it turns grey again.
 5. Values the photo already has are protected like in bulk mode. A hint under the field says *"Already set on this photo. Tick Overwrite … to change it."* Until you tick the matching **Overwrite** box, *Apply* counts 0.
-6. **Preview** / **Apply** work as normal. After Apply, the photo card and grey pin update to the new values.
+6. **Preview** / **Apply** work as normal. After Apply, the details card and grey pin update to the new values.
 
 Backups, the log and *Update file modified date* work exactly as in bulk mode. The backup folder can't be inside the photo's own folder.
 
 > TIFF photos show *No preview* unless they contain a small embedded thumbnail; tagging them works normally.
+
+---
+
+### Drag and drop
+
+Instead of **Browse…**, you can drag from your file manager (Nemo, Files, Dolphin, Windows Explorer or the macOS Finder) and drop anywhere on the Bulk GeoTag window. While you drag, the window shows a dashed outline.
+
+| You drop | What happens |
+|---|---|
+| **A folder** | Switches to **Bulk folder update**, selects that folder and scans it, as if you had chosen it with Browse… |
+| **One photo** (`.jpg .jpeg .tif .tiff .webp`) | Switches to **Single file update** and opens that photo, with its details card on the map |
+| **Several items at once** | Nothing changes; the status bar says *Drop one folder or one photo at a time.* |
+| **A PNG or another kind of file** | Nothing changes; the status bar says which types can be tagged |
+
+Drops are ignored while **Preview** or **Apply** is running, and while Help or Settings is open. The location, date taken and other options stay as they were.
+
+> **Tip:** On Linux Mint and other GTK desktops, the **Browse…** window can only show a list of names, not thumbnails. To pick photos by sight, browse in your file manager's icon or thumbnail view and drag the folder or photo across.
 
 ---
 
@@ -266,6 +285,7 @@ Between launches the app remembers:
 - **Back up originals** and the backup folder
 - the log folder
 - the map's position and zoom
+- whether the photo details card (single-file mode) is folded
 
 **Not** remembered, on purpose: the single photo you last opened, the location or pin (each batch is usually a different place), the *Include subfolders* and *Overwrite* boxes (safer to tick deliberately each time), the date taken box and its overwrite box, and *Update file modified date*, which starts **off** at every launch.
 
@@ -287,6 +307,9 @@ Between launches the app remembers:
 | **✕ "verification failed"** | The write didn't check out (wrong coordinates read back, or camera data would have changed), so the original was kept. Please report it with the file type and camera model. |
 | **TIFF ✕ "requires XResolution"** | Some generated TIFFs lack resolution tags. Camera and scanner TIFFs normally have them. |
 | **"Log NOT written: …"** | The log folder is missing or can't be written to. |
+| **"Drop one folder or one photo at a time"** | Several items were dropped together. Drop just one folder, or just one photo. |
+| **"… can't be tagged yet" / "is not a supported photo"** after a drop | Only JPEG, TIFF and WebP photos can be tagged. Drop a folder to tag all its photos at once. |
+| **The Browse… window shows no thumbnails** | That window belongs to the operating system; on Linux Mint (GTK) it only has a list view. Use [drag and drop](#drag-and-drop) from your file manager's thumbnail view instead. |
 | **Folder chooser button says "Open"** | That's normal on Linux. The label comes from the system's file chooser. Clicking it selects the folder. |
 
 ---

@@ -77,6 +77,7 @@ bulk-geotag/
 | `geocode` | `query` | `Candidate[]` | Re-reads `settings.json` each call. Cached. Rate-limited. |
 | `apply_gps` | `request: ApplyRequest` | `ApplyResult` | `dryRun: true` = Preview. Emits `apply-progress`. `root` may be a folder or one file. |
 | `inspect_photo` | `path` | `PhotoDetails` | Single-file mode. Read-only. Runs on a blocking thread. |
+| `path_kind` | `path` | `"folder" \| "photo" \| "other" \| "missing"` | Drag and drop: what a dropped path is. `photo` = `scan::is_supported` (PNG included; the UI then applies its writable-extension rule). |
 | `get_settings` | none | `SettingsView` | For the ⚙ dialog: settings, settings.json path, cache size, default server. Creates the file if missing. |
 | `save_settings` | `settings` | `Settings` | Validates and tidies (URL scheme, language codes, 1–10 results), writes settings.json, returns what was saved. |
 | `clear_search_cache` | none | number removed | Empties the geocode cache in memory and on disk. |
@@ -89,7 +90,9 @@ Key types (Rust → JSON):
 ScanResult   { photos, with_gps, unreadable, files: PhotoInfo[], folder_errors: PhotoInfo[] }
 PhotoInfo    { path, gps: "present" | "absent" | "unreadable", has_date, issue }
 Candidate    { label, lat, lon }
-PhotoDetails { path, name, lat?, lon?, date_taken? ("YYYY-MM-DD HH:MM:SS"), camera?, orientation, preview? (data: URL), preview_is_thumbnail, issue? }
+PhotoDetails { path, name, lat?, lon?, date_taken? ("YYYY-MM-DD HH:MM:SS"), camera?, lens?, exposure? ("1/250 s"), aperture? ("f/2.8"),
+               iso?, focal_length? ("35 mm (53 mm equiv.)"), dimensions? ("6240 × 4160"), software?, orientation, preview? (data: URL),
+               preview_is_thumbnail, issue? }
 ApplyRequest { root, recursive, overwrite, lat?, lon?, dateTaken?, overwriteDate = false, backupDir?, logDir?, dryRun, updateModified = false }   (camelCase in)
 ApplyResult  { dry_run, total, written, skipped, warnings, errors, entries: Entry[], log_file?, log_error? }
 Entry        { time, level: "info" | "warning" | "error", path, message }
@@ -157,6 +160,7 @@ on any failure: delete temp, original untouched
 
 ### `inspect.rs`: single-file details
 - Reads GPS (`read_coord`), Date Taken (`DateTimeOriginal`), Make/Model and Orientation with kamadak-exif.
+- Shooting details for the map card, formatted in Rust: `LensModel`, `ExposureTime` (`1/N s` below a second), `FNumber`, `PhotographicSensitivity` (ISO), `FocalLength` plus `FocalLengthIn35mmFilm` when it differs, `PixelX/YDimension` (falling back to `ImageWidth/Length`) and `Software`. Missing or zero values stay `None`. Tested against `test-data/exif-details.jpg`.
 - **Preview:** JPEG/WebP/PNG up to 25 MB are sent whole as a base64 `data:` URL (the web view applies EXIF orientation itself). Otherwise — TIFF or larger files — the EXIF **embedded thumbnail** (IFD1 `JPEGInterchangeFormat`) is used if present, and the UI rotates it from `orientation`.
 - In `apply.rs`, the backup-inside-photo-folder rule uses the file's **parent** folder in single-file mode.
 
@@ -172,11 +176,13 @@ on any failure: delete temp, original untouched
 - **Apply count** is worked out in the UI from the scan results: writable extension, not unreadable, and (overwrite or no GPS). It matches the backend's rules.
 - **Map:** Leaflet with OSM tiles. Markers are `divIcon`s, so there are no image assets to bundle. Clicking the map or dragging the pin sets lat/lon to 6 decimal places.
 - **Update file modified date** (`updateModified`) defaults to `false` in the UI and is not remembered. On the Rust side it is `#[serde(default)]`, so false when omitted.
-- **Dialogs:** `@tauri-apps/plugin-dialog`, with `open({directory:true})` for folders and `ask()` for the Apply confirmation.
+- **Dialogs:** `@tauri-apps/plugin-dialog`, with `open({directory:true})` for folders and `ask()` for the Apply confirmation. These are the system's own pickers (GTK on Linux, which has no thumbnail view).
+- **Drag and drop:** `getCurrentWebview().onDragDropEvent` (Tauri's native file drop; `dragDropEnabled` is on by default, and `core:default` allows the events). `enter`/`over` show the `.drop-hint` overlay. On `drop`, exactly one path is accepted; `path_kind` decides: folder → `setMode("bulk")` + `folder`, photo with a writable extension → `setMode("single")` + `filePath` + `loadDetails(true)`, anything else → a status message. Ignored while `busy` or a dialog is open.
+- **Photo details card:** single-file mode shows `details` in `.exif-card`, absolutely positioned top-right over the map (z-index 900, below Results and dialogs). `exifRows` drops empty values; ▾/▸ toggles `exifCollapsed`, which is remembered.
 - **Mode:** `mode` is `"bulk" | "single"`; `root` is the folder or the file. In single mode, `inspect_photo` fills `details`, pre-fills lat/lon and date, and `atCurrent` (pin within 1e-5° of the photo's GPS) drives the pin colour: grey `at-current` while there, red once moved, plus a non-interactive grey `currentMarker` at the photo's GPS.
 - **Settings dialog:** ⚙ button (`.gear`) opens a modal; `get_settings` fills a `draft`, Save calls `save_settings` and shows Rust's validation message on failure. *Show in folder* uses `revealItemInDir` from `@tauri-apps/plugin-opener` (allowed by `opener:default`).
 - **? Help:** `docs/USER_GUIDE.md` is imported with Vite's `?raw`, so its text is built into the app at build time (no Tauri resource, no Rust command, works offline). `marked` with `marked-gfm-heading-id` turns it into HTML once, with GitHub-style heading ids so the guide's Contents links match. Pictures in `docs/images/` are imported with `import.meta.glob(…, { query: "?url" })`, and a `walkTokens` hook points the guide's `images/…` links at the built-in copies. The HTML is shown with `{@html}` (safe: it comes only from our own file at build time) in a `.modal.help`; its styles use `.help-body :global(…)`. One click handler on the body scrolls `#anchor` links within the panel and opens anything else with `openUrl` (relative links go to the file on GitHub). `?` (`.corner-buttons`, next to ⚙) or F1 opens it; Esc closes Help first, then Settings.
-- **Remembered settings:** `localStorage` key `bulk-geotag.settings.v1` holds the mode, folder, backup on/off, backup folder, log folder and map centre/zoom. Every access is wrapped in try/catch.
+- **Remembered settings:** `localStorage` key `bulk-geotag.settings.v1` holds the mode, folder, backup on/off, backup folder, log folder, map centre/zoom and whether the details card is folded. Every access is wrapped in try/catch.
 
 ## Dependencies
 

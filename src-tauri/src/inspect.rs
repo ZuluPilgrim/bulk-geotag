@@ -20,6 +20,15 @@ pub struct PhotoDetails {
     /// Current Date Taken as "YYYY-MM-DD HH:MM:SS", if any.
     pub date_taken: Option<String>,
     pub camera: Option<String>,
+    /// Shooting details, already formatted for display ("1/250 s", "f/2.8", "35 mm (53 mm equiv.)").
+    pub lens: Option<String>,
+    pub exposure: Option<String>,
+    pub aperture: Option<String>,
+    pub iso: Option<u32>,
+    pub focal_length: Option<String>,
+    /// "6240 × 4160", as recorded in the EXIF data.
+    pub dimensions: Option<String>,
+    pub software: Option<String>,
     /// EXIF orientation 1–8 (applies to an embedded thumbnail; full images are rotated by the viewer).
     pub orientation: u32,
     /// `data:` URL for the preview, or None (e.g. TIFF, too large).
@@ -45,6 +54,25 @@ fn embedded_thumbnail(data: &exif::Exif) -> Option<Vec<u8>> {
     let offset = num(exif::Tag::JPEGInterchangeFormat)?;
     let length = num(exif::Tag::JPEGInterchangeFormatLength)?;
     data.buf().get(offset..offset.checked_add(length)?).map(<[u8]>::to_vec)
+}
+
+/// First value of a rational tag as a number.
+fn rational(x: &exif::Exif, tag: exif::Tag) -> Option<f64> {
+    match &x.get_field(tag, exif::In::PRIMARY)?.value {
+        exif::Value::Rational(v) => v.first().filter(|r| r.denom != 0).map(|r| r.to_f64()),
+        _ => None,
+    }
+}
+
+/// First value of a whole-number tag.
+fn uint(x: &exif::Exif, tag: exif::Tag) -> Option<u32> {
+    x.get_field(tag, exif::In::PRIMARY)?.value.get_uint(0)
+}
+
+/// A number with at most one decimal, without a trailing ".0" (2.8, 35, 0.5).
+fn trim(v: f64) -> String {
+    let s = format!("{:.1}", v);
+    s.strip_suffix(".0").map(str::to_string).unwrap_or(s)
 }
 
 pub fn inspect(path_str: &str) -> Result<PhotoDetails, String> {
@@ -83,6 +111,24 @@ pub fn inspect(path_str: &str) -> Result<PhotoDetails, String> {
             (Some(make), Some(model)) => Some(format!("{make} {model}")),
             (a, b) => a.or(b),
         };
+        d.lens = text(exif::Tag::LensModel).filter(|s| !s.is_empty());
+        d.software = text(exif::Tag::Software).filter(|s| !s.is_empty());
+        d.exposure = rational(x, exif::Tag::ExposureTime).filter(|v| *v > 0.0).map(|v| {
+            if v >= 1.0 { format!("{} s", trim(v)) } else { format!("1/{} s", (1.0 / v).round()) }
+        });
+        d.aperture = rational(x, exif::Tag::FNumber).filter(|v| *v > 0.0).map(|v| format!("f/{}", trim(v)));
+        d.iso = uint(x, exif::Tag::PhotographicSensitivity).filter(|v| *v > 0);
+        d.focal_length = rational(x, exif::Tag::FocalLength).filter(|v| *v > 0.0).map(|v| {
+            match uint(x, exif::Tag::FocalLengthIn35mmFilm).filter(|e| *e > 0 && f64::from(*e) != v.round()) {
+                Some(eq) => format!("{} mm ({eq} mm equiv.)", trim(v)),
+                None => format!("{} mm", trim(v)),
+            }
+        });
+        let w = uint(x, exif::Tag::PixelXDimension).or_else(|| uint(x, exif::Tag::ImageWidth));
+        let h = uint(x, exif::Tag::PixelYDimension).or_else(|| uint(x, exif::Tag::ImageLength));
+        if let (Some(w), Some(h)) = (w, h) {
+            d.dimensions = Some(format!("{w} × {h}"));
+        }
         d.orientation = x
             .get_field(exif::Tag::Orientation, exif::In::PRIMARY)
             .and_then(|f| f.value.get_uint(0))
@@ -104,4 +150,40 @@ pub fn inspect(path_str: &str) -> Result<PhotoDetails, String> {
         }
     }
     Ok(d)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_shooting_details() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("test-data/exif-details.jpg");
+        let d = inspect(path.to_str().unwrap()).unwrap();
+        assert_eq!(d.camera.as_deref(), Some("FUJIFILM X-T3"));
+        assert_eq!(d.lens.as_deref(), Some("XF35mmF1.4 R"));
+        assert_eq!(d.exposure.as_deref(), Some("1/250 s"));
+        assert_eq!(d.aperture.as_deref(), Some("f/2.8"));
+        assert_eq!(d.iso, Some(400));
+        assert_eq!(d.focal_length.as_deref(), Some("35 mm (53 mm equiv.)"));
+        assert_eq!(d.dimensions.as_deref(), Some("6240 × 4160"));
+        assert_eq!(d.software.as_deref(), Some("darktable 4.6.1"));
+        assert_eq!(d.date_taken.as_deref(), Some("2024-03-09 14:22:05"));
+        assert!(d.issue.is_none());
+    }
+
+    #[test]
+    fn missing_details_stay_empty() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("test-data/bad-xresolution.jpg");
+        let d = inspect(path.to_str().unwrap()).unwrap();
+        assert!(d.lens.is_none() && d.exposure.is_none() && d.aperture.is_none() && d.iso.is_none());
+        assert_eq!(d.camera.as_deref(), Some("Canon TestCam"));
+    }
+
+    #[test]
+    fn trims_numbers() {
+        assert_eq!(trim(2.8), "2.8");
+        assert_eq!(trim(35.0), "35");
+        assert_eq!(trim(0.5), "0.5");
+    }
 }
