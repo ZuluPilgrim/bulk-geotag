@@ -1,6 +1,6 @@
 [package]
 name = "bulk-geotag"
-version = "1.3.1"
+version = "1.4.0"
 description = "Add GPS location and date taken to photos, in bulk or one at a time"
 authors = ["ZuluPilgrim"]
 license = "MIT"
