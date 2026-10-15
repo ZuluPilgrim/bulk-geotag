@@ -15,7 +15,7 @@ fi
 echo
 echo "== 2. Anything that looks like a secret, anywhere in history =="
 hits=$(git log -p --all -- . ':(exclude)scripts/prepublish-check.sh' | grep -inE 'api[_-]?key|secret|password|passwd|token|BEGIN (RSA|OPENSSH|EC) PRIVATE' \
-        | grep -viE 'GITHUB_TOKEN|GH_TOKEN|secrets\.GITHUB' | head -20)
+        | grep -viE 'GITHUB_TOKEN|GH_TOKEN|secrets\.GITHUB|walkTokens|token\.(type|href)' | head -20)
 if [ -n "$hits" ]; then echo "$hits"; echo "   CHECK the lines above."; fail=1; else echo "   none found"; fi
 
 echo
