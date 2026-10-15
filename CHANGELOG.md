@@ -3,6 +3,23 @@
 All notable changes to Bulk GeoTag. Dates are NZ local time.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] - 2026-10-15
+
+### Added
+- **🖼 Inspector** (button beside Browse…): browse folders inside the app as a photo gallery, with a map of where the selected photo was taken and its EXIF details.
+  - Clickable folder path, Up and subfolder buttons (linked folders marked ↪), and a tile size slider from small to very large (remembered).
+  - Thumbnails load as you scroll: the photo's embedded thumbnail when there is one, otherwise one is made and cached (768 px for large tiles).
+  - Mouse and keyboard: arrows (↑ ↓ by on-screen rows), Enter, Backspace, Space for a big preview, Esc.
+  - Closing hands back the folder on screen (bulk mode; the map also moves to the last photo's GPS) or the photo you picked (single mode).
+- ⚙ Settings: *Inspector thumbnails* count with **Clear**.
+
+### Fixed
+- A **linked photo** (symbolic link) chosen in single-file mode is no longer tagged: writing it would have replaced the link with a copy and left the original untagged. Linked photos inside a folder were already skipped.
+
+### Changed
+- `tauri dev` builds dependencies optimised, so making thumbnails isn't slow in development (the first dev build after this takes longer).
+- User Guide: new *The Inspector* section, and screenshots of single-file mode, drag and drop, the Inspector and its preview.
+
 ## [1.4.0] - 2026-10-15
 
 ### Added

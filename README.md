@@ -12,6 +12,7 @@ Built with [Tauri 2](https://tauri.app) (Rust) and [Svelte](https://svelte.dev),
 
 - **Two modes**: *Bulk folder update* or *Single file update*. Single-file mode shows the photo and its details (GPS, date taken, camera, lens, exposure, focal length, size) in a card on the map, marks its current GPS with a grey pin, and pre-fills them ready to adjust.
 - **Drag and drop**: drop a folder or a photo from your file manager onto the window instead of using Browse….
+- **🖼 Inspector**: browse folders as a photo gallery (adjustable tile size, mouse or keyboard), with a map of where the selected photo was taken and its EXIF details. Closing it hands the folder or photo back to the main screen.
 - **Folder scan**: counts photos and shows how many already have GPS. Can include subfolders (any depth).
 - **Place search**: type a name such as *Colosseum, Rome* and pick from up to 5 matches, or click/drag the pin to an exact spot. Coordinates can also be typed in.
 - **Date taken** (optional): set one date and time for every photo, with its own *overwrite existing* option. Can be used with or without a location.

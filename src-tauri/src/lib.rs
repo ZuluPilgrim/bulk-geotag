@@ -1,10 +1,12 @@
 mod apply;
+mod browse;
 mod exif_repair;
 mod geocode;
 mod inspect;
 mod log;
 mod scan;
 mod settings;
+mod thumbs;
 
 use tauri::{Emitter, Manager};
 
@@ -63,6 +65,29 @@ fn path_kind(path: String) -> &'static str {
     }
 }
 
+/// Inspector: the subfolders and photos of one folder (a file lists its own folder).
+#[tauri::command]
+async fn list_folder(path: String) -> Result<browse::FolderListing, String> {
+    tauri::async_runtime::spawn_blocking(move || browse::list_folder(&path))
+        .await
+        .map_err(|e| format!("list task failed: {e}"))?
+}
+
+/// Inspector: a thumbnail for one photo (embedded EXIF thumbnail, else generated and cached).
+#[tauri::command]
+async fn photo_thumbnail(app: tauri::AppHandle, path: String, large: Option<bool>) -> Result<Option<thumbs::Thumb>, String> {
+    let cache = thumbs_dir(&app)?;
+    let large = large.unwrap_or(false);
+    tauri::async_runtime::spawn_blocking(move || thumbs::thumbnail(std::path::Path::new(&path), &cache, large))
+        .await
+        .map_err(|e| format!("thumbnail task failed: {e}"))?
+}
+
+/// Folder holding generated thumbnails.
+fn thumbs_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    Ok(app.path().app_cache_dir().map_err(|e| format!("no cache folder: {e}"))?.join("thumbs"))
+}
+
 /// Everything the ⚙ Settings dialog shows.
 #[derive(serde::Serialize)]
 struct SettingsView {
@@ -71,6 +96,8 @@ struct SettingsView {
     path: String,
     /// Number of cached searches.
     cache_entries: usize,
+    /// Number of generated thumbnails in the cache.
+    cache_thumbnails: usize,
     default_nominatim_url: &'static str,
 }
 
@@ -81,6 +108,7 @@ fn get_settings(app: tauri::AppHandle, geocoder: tauri::State<'_, geocode::Geoco
         settings: settings::load(&app)?,
         path: settings::settings_path(&app)?.display().to_string(),
         cache_entries: geocoder.cache_len(),
+        cache_thumbnails: thumbs::cache_count(&thumbs_dir(&app)?),
         default_nominatim_url: settings::DEFAULT_NOMINATIM_URL,
     })
 }
@@ -95,6 +123,12 @@ fn save_settings(app: tauri::AppHandle, settings: settings::Settings) -> Result<
 #[tauri::command]
 fn clear_search_cache(geocoder: tauri::State<'_, geocode::Geocoder>) -> usize {
     geocoder.clear_cache()
+}
+
+/// Delete the generated thumbnails. Returns how many were removed.
+#[tauri::command]
+fn clear_thumbnail_cache(app: tauri::AppHandle) -> Result<usize, String> {
+    Ok(thumbs::clear_cache(&thumbs_dir(&app)?))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -115,7 +149,10 @@ pub fn run() {
             get_settings,
             save_settings,
             clear_search_cache,
-            path_kind
+            path_kind,
+            list_folder,
+            photo_thumbnail,
+            clear_thumbnail_cache
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

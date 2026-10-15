@@ -51,9 +51,13 @@ bulk-geotag/
 ├── vite.config.js               ← Tauri dev-server settings (port 1420)
 ├── src/
 │   ├── app.html
+│   ├── lib/
+│   │   ├── Inspector.svelte     ← 🖼 Inspector: gallery, breadcrumb, mini map, keys
+│   │   ├── ExifDetails.svelte   ← the EXIF list (map card and Inspector)
+│   │   └── types.ts             ← PhotoDetails
 │   └── routes/
 │       ├── +layout.ts           ← ssr = false (SPA)
-│       └── +page.svelte         ← the whole UI
+│       └── +page.svelte         ← the main screen
 └── src-tauri/
     ├── Cargo.toml               ← Rust deps
     ├── tauri.conf.json          ← window size/title, identifier, bundling
@@ -63,6 +67,8 @@ bulk-geotag/
         ├── lib.rs               ← registers plugins, state and commands
         ├── scan.rs              ← folder walk (or single file) + "has GPS / date?" detection
         ├── inspect.rs           ← single-file mode: current GPS, date, camera, preview
+        ├── browse.rs            ← Inspector: one folder's subfolders + photos
+        ├── thumbs.rs            ← Inspector thumbnails: embedded → cache → generated (image crate)
         ├── geocode.rs           ← Nominatim client: rate limit, cache, User-Agent
         ├── settings.rs          ← settings.json (server URL, contact email, language, results) + validation
         ├── apply.rs             ← Preview / Apply: backups, safe write, verify
@@ -81,6 +87,9 @@ bulk-geotag/
 | `get_settings` | none | `SettingsView` | For the ⚙ dialog: settings, settings.json path, cache size, default server. Creates the file if missing. |
 | `save_settings` | `settings` | `Settings` | Validates and tidies (URL scheme, language codes, 1–10 results), writes settings.json, returns what was saved. |
 | `clear_search_cache` | none | number removed | Empties the geocode cache in memory and on disk. |
+| `list_folder` | `path` | `FolderListing` | Inspector. One folder (a file lists its folder): subfolders then photos, A–Z ignoring case, hidden left out, symlinks followed and marked `linked`, broken links left out. `parent` is None at `/` or a drive root. |
+| `photo_thumbnail` | `path`, `large?` | `Thumb \| null` | Inspector. Embedded EXIF thumbnail (small tiles only), else cached/generated JPEG: 256 px, or 768 px when `large`. Blocking thread. |
+| `clear_thumbnail_cache` | none | number removed | Deletes `thumbs/*.jpg` in the app cache folder. `get_settings` also returns `cache_thumbnails`. |
 
 **Event:** `apply-progress` with payload `[done, total]`, emitted once per photo during Preview and Apply.
 
@@ -90,6 +99,8 @@ Key types (Rust → JSON):
 ScanResult   { photos, with_gps, unreadable, files: PhotoInfo[], folder_errors: PhotoInfo[] }
 PhotoInfo    { path, gps: "present" | "absent" | "unreadable", has_date, issue }
 Candidate    { label, lat, lon }
+FolderListing{ path, parent?, folders: Item[], photos: Item[] }      Item { name, path, linked }
+Thumb        { data (data:image/jpeg;base64), orientation 1–8, embedded }
 PhotoDetails { path, name, lat?, lon?, date_taken? ("YYYY-MM-DD HH:MM:SS"), camera?, lens?, exposure? ("1/250 s"), aperture? ("f/2.8"),
                iso?, focal_length? ("35 mm (53 mm equiv.)"), dimensions? ("6240 × 4160"), software?, orientation, preview? (data: URL),
                preview_is_thumbnail, issue? }
@@ -164,6 +175,11 @@ on any failure: delete temp, original untouched
 - **Preview:** JPEG/WebP/PNG up to 25 MB are sent whole as a base64 `data:` URL (the web view applies EXIF orientation itself). Otherwise — TIFF or larger files — the EXIF **embedded thumbnail** (IFD1 `JPEGInterchangeFormat`) is used if present, and the UI rotates it from `orientation`.
 - In `apply.rs`, the backup-inside-photo-folder rule uses the file's **parent** folder in single-file mode.
 
+### `browse.rs` + `thumbs.rs`: the Inspector
+- `list_folder` reads one directory with `read_dir`. `file_type()` doesn't follow links, so a symlink is classified by `fs::metadata` (followed); browsing one folder at a time can't loop. These listings are **display only**: `scan.rs` still skips linked entries, and refuses a linked single photo (writing through a temp file + rename would replace the link).
+- Thumbnails: `embedded_thumbnail()` from `inspect.rs` when not `large`; otherwise `thumbs/<fnv1a(path|size|mtime)>-<px>.jpg` in the app cache dir, else decode with `image` (jpeg/png/webp/tiff, no default features), `thumbnail(px, px)`, JPEG q80, write via `.tmp` + rename. Orientation is returned, not applied; the UI rotates with CSS.
+- `Cargo.toml` sets `[profile.dev.package."*"] opt-level = 2`: unoptimised image decoding is ~10× slower in `tauri dev`.
+
 ### `log.rs`: CSV log
 - Name `bulk-geotag_%Y-%m-%d_%H-%M-%S.csv`, from the local start time of the run (chrono).
 - Opened in append mode. The header row is written only if the file is empty.
@@ -178,6 +194,7 @@ on any failure: delete temp, original untouched
 - **Update file modified date** (`updateModified`) defaults to `false` in the UI and is not remembered. On the Rust side it is `#[serde(default)]`, so false when omitted.
 - **Dialogs:** `@tauri-apps/plugin-dialog`, with `open({directory:true})` for folders and `ask()` for the Apply confirmation. These are the system's own pickers (GTK on Linux, which has no thumbnail view).
 - **Drag and drop:** `getCurrentWebview().onDragDropEvent` (Tauri's native file drop; `dragDropEnabled` is on by default, and `core:default` allows the events). `enter`/`over` show the `.drop-hint` overlay. On `drop`, exactly one path is accepted; `path_kind` decides: folder → `setMode("bulk")` + `folder`, photo with a writable extension → `setMode("single")` + `filePath` + `loadDetails(true)`, anything else → a status message. Ignored while `busy` or a dialog is open.
+- **Inspector** (`src/lib/Inspector.svelte`): mounted as a `position: fixed` overlay (z-index 1500, under the Help/Settings modals at 2000) while `inspectorOpen`. Thumbnails: an `IntersectionObserver` (action `lazy`) tracks tiles near the view; a queue fetches at most 4 at a time, keyed `S|path` / `L|path` (large from tile ≥ 200 px), showing the other size while one loads. Its own Leaflet map shows the selected photo's pin. Keys: the page's `onKey` calls `inspector.handleKey(e)` first (unless a dialog is open); ↑ ↓ pick the nearest item in the row above/below by `getBoundingClientRect`, so they work across the wrapped folder buttons and the photo grid. `result()` returns the folder on screen, the photo the user picked (not an automatic selection) and its GPS; `closeInspector()` applies it per mode.
 - **Photo details card:** single-file mode shows `details` in `.exif-card`, absolutely positioned top-right over the map (z-index 900, below Results and dialogs). `exifRows` drops empty values; ▾/▸ toggles `exifCollapsed`, which is remembered.
 - **Mode:** `mode` is `"bulk" | "single"`; `root` is the folder or the file. In single mode, `inspect_photo` fills `details`, pre-fills lat/lon and date, and `atCurrent` (pin within 1e-5° of the photo's GPS) drives the pin colour: grey `at-current` while there, red once moved, plus a non-interactive grey `currentMarker` at the photo's GPS.
 - **Settings dialog:** ⚙ button (`.gear`) opens a modal; `get_settings` fills a `draft`, Save calls `save_settings` and shows Rust's validation message on failure. *Show in folder* uses `revealItemInDir` from `@tauri-apps/plugin-opener` (allowed by `opener:default`).
@@ -195,7 +212,8 @@ on any failure: delete temp, original untouched
 | `reqwest` (rustls) | HTTPS to Nominatim |
 | `serde`, `serde_json` | Command payloads, settings, cache |
 | `chrono` | Local time for log names and lines |
-| `base64` | Preview images for single-file mode |
+| `base64` | Preview images for single-file mode and Inspector thumbnails |
+| `image` (jpeg, png, webp, tiff) | Making Inspector thumbnails |
 | `leaflet` | Map |
 | `marked`, `marked-gfm-heading-id` | User Guide → HTML for ? Help |
 | `svelte`, `@sveltejs/kit`, `adapter-static`, `vite` | Frontend |

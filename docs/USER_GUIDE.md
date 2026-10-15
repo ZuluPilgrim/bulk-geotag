@@ -8,6 +8,7 @@ Bulk GeoTag adds a GPS location and/or a date taken to every photo in a folder. 
 2. [Tagging a folder, step by step](#tagging-a-folder-step-by-step)
    - [Single file update](#single-file-update)
    - [Drag and drop](#drag-and-drop): drop a folder or a photo from your file manager
+   - [The Inspector](#the-inspector): browse photos as a gallery, with a map and their details
 3. [Options explained](#options-explained)
    - [File dates and sync tools](#file-dates-and-sync-tools): which dates photo apps and sync tools use
    - [Setting the date taken](#setting-the-date-taken)
@@ -23,10 +24,11 @@ Bulk GeoTag adds a GPS location and/or a date taken to every photo in a folder. 
 
 ## The screen at a glance
 
-![Bulk GeoTag: photo folder, place search, date taken, backup and log on the left; map with the search results on the right](images/screenshot.png)
+![Bulk GeoTag: photo folder, place search, date taken, backup and log on the left; map with the selected search result on the right](images/screenshot.png)
 
 - **Left panel**, top to bottom: **Photos** (mode, folder, scope options and the photo count), **Location** (place search and its results, Lat/Lon), **Date taken**, **Backup**, **Log**, then **Preview** and **Apply** at the bottom (scroll down if the window is short).
 - **?** and **⚙** at the top-right of the left panel open this guide (or press **F1**) and the [Settings](#settings-and-place-search).
+- **🖼** beside **Browse…** opens the [Inspector](#the-inspector): a gallery of the folder's photos with a map and their details.
 - **Map** on the right: numbered circles are search results, and the red pin is the spot that will be written. In single-file mode, the photo and its details show in a card at the map's top-right corner.
 - **Drag and drop:** drop a folder or a photo anywhere on the window instead of using Browse… (see [Drag and drop](#drag-and-drop)).
 - **Status bar** along the bottom: progress, results and the log file name.
@@ -65,7 +67,9 @@ Choose **Single file update** at the top of *Photos* to work on one photo instea
 5. Values the photo already has are protected like in bulk mode. A hint under the field says *"Already set on this photo. Tick Overwrite … to change it."* Until you tick the matching **Overwrite** box, *Apply* counts 0.
 6. **Preview** / **Apply** work as normal. After Apply, the details card and grey pin update to the new values.
 
-Backups, the log and *Update file modified date* work exactly as in bulk mode. The backup folder can't be inside the photo's own folder.
+![Single file update: the photo's details card in the top-right corner of the map, with a grey pin where it is tagged now](images/single-file.png)
+
+Backups, the log and *Update file modified date* work exactly as in bulk mode. The backup folder can't be inside the photo's own folder. A **linked** photo (a symbolic link) can be looked at but not tagged: open the original photo instead.
 
 > TIFF photos show *No preview* unless they contain a small embedded thumbnail; tagging them works normally.
 
@@ -75,6 +79,8 @@ Backups, the log and *Update file modified date* work exactly as in bulk mode. T
 
 Instead of **Browse…**, you can drag from your file manager (Nemo, Files, Dolphin, Windows Explorer or the macOS Finder) and drop anywhere on the Bulk GeoTag window. While you drag, the window shows a dashed outline.
 
+![Dragging a folder over the window: a dashed outline and "Drop a folder to tag all its photos, or one photo to tag just that one"](images/drag-drop.png)
+
 | You drop | What happens |
 |---|---|
 | **A folder** | Switches to **Bulk folder update**, selects that folder and scans it, as if you had chosen it with Browse… |
@@ -82,9 +88,51 @@ Instead of **Browse…**, you can drag from your file manager (Nemo, Files, Dolp
 | **Several items at once** | Nothing changes; the status bar says *Drop one folder or one photo at a time.* |
 | **A PNG or another kind of file** | Nothing changes; the status bar says which types can be tagged |
 
-Drops are ignored while **Preview** or **Apply** is running, and while Help or Settings is open. The location, date taken and other options stay as they were.
+Drops are ignored while **Preview** or **Apply** is running, and while Help, Settings or the Inspector is open. The location, date taken and other options stay as they were.
 
-> **Tip:** On Linux Mint and other GTK desktops, the **Browse…** window can only show a list of names, not thumbnails. To pick photos by sight, browse in your file manager's icon or thumbnail view and drag the folder or photo across.
+> **Tip:** On Linux Mint and other GTK desktops, the **Browse…** window can only show a list of names, not thumbnails. To pick photos by sight, use the [Inspector](#the-inspector), or browse in your file manager's thumbnail view and drag the folder or photo across.
+
+---
+
+### The Inspector
+
+The **Inspector** shows a folder's photos as a gallery inside the app, with a map of where the selected photo was taken and its details. It only looks: nothing is written to any photo. Open it with the **🖼** button beside **Browse…**, in either mode.
+
+![The Inspector: folder buttons and photo tiles on the left; a map with the selected photo's pin and its details on the right](images/inspector.png)
+
+**Where it opens:** in bulk mode, at the chosen folder; in single-file mode, at the photo's folder with that photo selected; with nothing chosen yet, at your home folder.
+
+**On screen:**
+
+- **Header:** the folder path; click any part of it to jump there. The **size slider** makes the tiles smaller or larger (up to very large; the size is remembered). The blue **🖼 Inspector** button, **✕** or **Esc** closes it.
+- **Folders:** **↑ Up** and the subfolders, as a row of buttons above the photos. **Double-click** one to open it. Linked folders show **↪** after the name.
+- **Photos:** a tile for each photo (`.jpg .jpeg .png .tif .tiff .webp`). The first time a folder is shown, thumbnails appear as you scroll; after that they're instant. Photos that can't be shown get a grey tile with their type.
+- **Right side:** a **map** with a pin where the selected photo was taken (or *No GPS in this photo*), and below it the same **details** as the [single-file card](#single-file-update).
+
+**Mouse and keyboard:**
+
+| To… | Mouse | Keyboard |
+|---|---|---|
+| Select a photo | Click it | **← → ↑ ↓** |
+| Move between folder buttons and photos | | **← →** step one at a time; **↑ ↓** go to the row above or below |
+| Open a folder | Double-click | **Enter** |
+| Go up a folder | Double-click **↑ Up**, or click the path | **Backspace** |
+| See a photo large | Double-click it | **Space**; then **← →** for the previous/next photo, **Space** or **Esc** to close |
+| Take the photo and close | | **Enter** on a photo |
+| Close | **🖼 Inspector** or **✕** | **Esc** |
+
+![The big preview of the selected photo, filling the Inspector](images/inspector-preview.jpg)
+
+**When you close it:**
+
+| Mode | What happens |
+|---|---|
+| **Bulk folder update** | *Folder* becomes the folder shown in the Inspector, and is scanned. If the last photo you selected has GPS, the map moves there (your pin stays where it is). |
+| **Single file update** | *Photo* becomes the last photo you clicked or moved to, with its card and pin on the map. If you didn't pick one, nothing changes. |
+
+The location, date taken and other options aren't touched.
+
+> **Thumbnails** made by the Inspector are kept in the app's cache folder so folders open quickly next time. **⚙ Settings → Inspector thumbnails** shows how many there are and clears them.
 
 ---
 
@@ -102,7 +150,7 @@ Drops are ignored while **Preview** or **Apply** is running, and while Help or S
 Always skipped, whatever the options:
 
 - **Hidden** files and folders (names starting with `.`)
-- **Linked folders** (symbolic links are not followed)
+- **Linked folders and photos** (symbolic links are not followed). The [Inspector](#the-inspector) shows them, but they're never tagged.
 - **PNG** files (writing is not supported yet; logged as a warning)
 - **Unreadable** files (corrupt metadata, or not really an image; logged as an error)
 
@@ -251,6 +299,7 @@ Place search uses OpenStreetMap's free **Nominatim** service. Click the **⚙** 
 | **Search language** | Language for place names, as codes: `en`, `af`, `mi`, `de`… Several can be listed in order of preference, e.g. `en,mi`. Blank means `en`. |
 | **Results per search** | How many matches a search shows, 1–10 (default 5). |
 | **Clear cache** | Searches are cached, so repeating one is instant and doesn't contact the server. Clearing the cache makes the next searches fetch fresh results. |
+| **Inspector thumbnails** | How many thumbnails the [Inspector](#the-inspector) has saved, and **Clear** to delete them. They're made again when needed. |
 | **Show in folder** | Opens the folder holding `settings.json` in your file manager. |
 
 **Save** checks the values (for example, the server must start with `https://`) and shows a message if something needs fixing. **Cancel** or **Esc** closes without saving. Changes apply to the next search with no restart needed.
@@ -272,7 +321,7 @@ The settings are kept in a small file, which you can also edit by hand:
 }
 ```
 
-To follow Nominatim's rules, searches happen only when you press Enter or Find, at most one per second. The cache lives in `~/.cache/com.zulupilgrim.bulkgeotag/geocode-cache.json` on Linux (`%LOCALAPPDATA%\com.zulupilgrim.bulkgeotag\` on Windows) and is safe to delete.
+To follow Nominatim's rules, searches happen only when you press Enter or Find, at most one per second. The cache lives in `~/.cache/com.zulupilgrim.bulkgeotag/geocode-cache.json` on Linux (`%LOCALAPPDATA%\com.zulupilgrim.bulkgeotag\` on Windows) and is safe to delete. Inspector thumbnails are in the `thumbs` folder next to it, also safe to delete.
 
 ---
 
@@ -286,6 +335,7 @@ Between launches the app remembers:
 - the log folder
 - the map's position and zoom
 - whether the photo details card (single-file mode) is folded
+- the Inspector's tile size
 
 **Not** remembered, on purpose: the single photo you last opened, the location or pin (each batch is usually a different place), the *Include subfolders* and *Overwrite* boxes (safer to tick deliberately each time), the date taken box and its overwrite box, and *Update file modified date*, which starts **off** at every launch.
 
@@ -310,13 +360,15 @@ Between launches the app remembers:
 | **"Drop one folder or one photo at a time"** | Several items were dropped together. Drop just one folder, or just one photo. |
 | **"… can't be tagged yet" / "is not a supported photo"** after a drop | Only JPEG, TIFF and WebP photos can be tagged. Drop a folder to tag all its photos at once. |
 | **The Browse… window shows no thumbnails** | That window belongs to the operating system; on Linux Mint (GTK) it only has a list view. Use [drag and drop](#drag-and-drop) from your file manager's thumbnail view instead. |
+| **"… is a link to a photo. Open the original photo instead."** | The chosen photo is a symbolic link. Tagging it would replace the link with a copy and leave the original untouched, so it's refused. |
+| **Inspector thumbnails are slow the first time** | They're being made from the full photos (common for edited exports without an embedded thumbnail, and for large tiles). Next time the folder opens instantly. |
 | **Folder chooser button says "Open"** | That's normal on Linux. The label comes from the system's file chooser. Clicking it selects the folder. |
 
 ---
 
 ## Limitations
 
-- In single-file mode, TIFF photos have no preview (the app's built-in viewer can't show TIFF) unless they contain an embedded thumbnail.
+- In single-file mode and the Inspector's big preview, TIFF photos have no full-size preview (the app's built-in viewer can't show TIFF) unless they contain an embedded thumbnail. Inspector tiles do show TIFFs.
 - PNG, HEIC/HEIF (iPhone) and RAW files are not written yet. PNG is skipped and logged. HEIC and RAW are not scanned at all.
 - Only latitude/longitude and date taken are written, not altitude, direction or time zone.
 - The date taken is the same for every photo in a run; shifting each photo's own date by an offset isn't supported yet.

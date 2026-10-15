@@ -49,7 +49,7 @@ fn mime_for(path: &Path) -> Option<&'static str> {
 }
 
 /// The thumbnail JPEG embedded in the EXIF data (IFD1), if present.
-fn embedded_thumbnail(data: &exif::Exif) -> Option<Vec<u8>> {
+pub(crate) fn embedded_thumbnail(data: &exif::Exif) -> Option<Vec<u8>> {
     let num = |tag| data.get_field(tag, exif::In::THUMBNAIL).and_then(|f| f.value.get_uint(0)).map(|v| v as usize);
     let offset = num(exif::Tag::JPEGInterchangeFormat)?;
     let length = num(exif::Tag::JPEGInterchangeFormatLength)?;

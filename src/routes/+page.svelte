@@ -9,6 +9,9 @@
   import { Marked } from "marked";
   import { gfmHeadingId } from "marked-gfm-heading-id";
   import guideMd from "../../docs/USER_GUIDE.md?raw";
+  import Inspector from "$lib/Inspector.svelte";
+  import ExifDetails from "$lib/ExifDetails.svelte";
+  import type { PhotoDetails } from "$lib/types";
   import "leaflet/dist/leaflet.css";
   import type { Map as LMap, Marker } from "leaflet";
 
@@ -53,44 +56,9 @@
   // What gets scanned and written: the folder, or the one photo.
   let root = $derived(mode === "bulk" ? folder : filePath);
 
-  type PhotoDetails = {
-    path: string;
-    name: string;
-    lat: number | null;
-    lon: number | null;
-    date_taken: string | null; // "YYYY-MM-DD HH:MM:SS"
-    camera: string | null;
-    lens: string | null;
-    exposure: string | null; // "1/250 s"
-    aperture: string | null; // "f/2.8"
-    iso: number | null;
-    focal_length: string | null; // "35 mm (53 mm equiv.)"
-    dimensions: string | null; // "6240 × 4160"
-    software: string | null;
-    orientation: number;
-    preview: string | null;
-    preview_is_thumbnail: boolean;
-    issue: string | null;
-  };
   let details = $state<PhotoDetails | null>(null);
   // Single-file mode: the photo's details card in the corner of the map, folded down to its title bar.
   let exifCollapsed = $state(saved.exifCollapsed ?? false);
-  /** The card's rows after GPS and Date taken; empty values are left out. */
-  let exifRows = $derived.by(() => {
-    const d = details;
-    if (!d) return [];
-    const shot = [d.exposure, d.aperture, d.iso ? `ISO ${d.iso}` : null].filter(Boolean).join(" · ");
-    return (
-      [
-        ["Camera", d.camera],
-        ["Lens", d.lens],
-        ["Exposure", shot],
-        ["Focal length", d.focal_length],
-        ["Size", d.dimensions],
-        ["Software", d.software],
-      ] as [string, string | null][]
-    ).filter(([, v]) => !!v);
-  });
   let includeSubfolders = $state(false);
   let overwriteGps = $state(false);
   // Off by default (keep original dates). Tick it so OneDrive and other sync/backup tools notice the changed photos.
@@ -437,6 +405,50 @@
     return { 3: "rotate(180deg)", 6: "rotate(90deg)", 8: "rotate(-90deg)" }[d.orientation] ?? "";
   }
 
+  // ---------- 🖼 Inspector: browse folders and photos inside the app ----------
+  let inspectorOpen = $state(false);
+  let inspector = $state<ReturnType<typeof Inspector> | null>(null);
+  // Where it opens: bulk mode → the folder; single mode → the photo (its folder opens, photo selected).
+  let inspectorStart = $state("");
+
+  /** 🖼 toggles the Inspector. */
+  function toggleInspector() {
+    if (inspectorOpen) closeInspector();
+    else {
+      inspectorStart = mode === "bulk" ? folder : filePath || folder;
+      inspectorOpen = true;
+    }
+  }
+
+  /** Close it and take its result: bulk → the folder on screen; single → the last photo selected. */
+  async function closeInspector() {
+    const r = inspector?.result();
+    inspectorOpen = false;
+    if (!r) return;
+    if (mode === "bulk") {
+      if (r.folder && r.folder !== folder) {
+        folder = r.folder;
+        status = `Folder from the Inspector: ${r.folder}`;
+      }
+      // Show where the last photo looked at is tagged (the pin you placed stays where it is).
+      if (r.gps) map?.setView(r.gps, 14);
+    } else if (r.photo) {
+      if (!WRITABLE.test(r.photo)) {
+        status = `${fileName(r.photo)}: this type of photo can't be tagged yet (JPEG, TIFF or WebP only).`;
+        return;
+      }
+      if (r.photo === filePath) {
+        // Same photo: just show where it's tagged; your pin and date stay as they are.
+        if (r.gps) map?.setView(r.gps, 14);
+        return;
+      }
+      filePath = r.photo;
+      await loadDetails(true); // moves the map to it when it has GPS
+      status = `Photo from the Inspector: ${fileName(r.photo)}`;
+    }
+  }
+
+
   // ---------- Drag and drop: a folder or a photo from the file manager ----------
   let dragging = $state(false); // something is being dragged over the window
 
@@ -484,7 +496,7 @@
         const t = e.payload.type;
         if (t === "enter" || t === "over") dragging = true;
         else dragging = false;
-        if (t === "drop" && !helpOpen && !settingsOpen) onDrop(e.payload.paths);
+        if (t === "drop" && !helpOpen && !settingsOpen && !inspectorOpen) onDrop(e.payload.paths);
       })
       .then((fn) => (disposed ? fn() : (unlisten = fn)))
       .catch(() => {}); // not running inside the app (e.g. plain browser): no drag and drop
@@ -630,7 +642,13 @@
 
   // ---------- ⚙ Settings dialog ----------
   type AppSettings = { nominatim_url: string; contact_email: string; language: string; max_results: number };
-  type SettingsView = { settings: AppSettings; path: string; cache_entries: number; default_nominatim_url: string };
+  type SettingsView = {
+    settings: AppSettings;
+    path: string;
+    cache_entries: number;
+    cache_thumbnails: number;
+    default_nominatim_url: string;
+  };
 
   let settingsOpen = $state(false);
   let sv = $state<SettingsView | null>(null); // what's saved
@@ -674,6 +692,18 @@
     const removed = await invoke<number>("clear_search_cache");
     if (sv) sv.cache_entries = 0;
     settingsNote = `Cleared ${removed} cached search${removed === 1 ? "" : "es"}.`;
+  }
+
+  /** Delete the Inspector's saved thumbnails; they are made again when needed. */
+  async function clearThumbnails() {
+    settingsError = "";
+    try {
+      const removed = await invoke<number>("clear_thumbnail_cache");
+      if (sv) sv.cache_thumbnails = 0;
+      settingsNote = `Cleared ${removed} thumbnail${removed === 1 ? "" : "s"}.`;
+    } catch (e) {
+      settingsError = `Could not clear thumbnails: ${e}`;
+    }
   }
 
   /** Show settings.json in the system file manager. */
@@ -739,9 +769,12 @@
 
   /** Esc closes the top dialog (Help, then Settings); F1 opens Help. */
   function onKey(e: KeyboardEvent) {
+    // The Inspector gets its keys first (arrows, Enter, Space…), unless a dialog is on top of it.
+    if (inspectorOpen && !helpOpen && !settingsOpen && inspector?.handleKey(e)) return;
     if (e.key === "Escape") {
       if (helpOpen) helpOpen = false;
       else if (settingsOpen) settingsOpen = false;
+      else if (inspectorOpen) closeInspector();
     } else if (e.key === "F1") {
       e.preventDefault();
       openHelp();
@@ -778,6 +811,15 @@
           readonly
         />
         <button type="button" class="primary" onclick={browsePhotos}>Browse…</button>
+        <button
+          type="button"
+          class="inspect"
+          class:on={inspectorOpen}
+          onclick={toggleInspector}
+          title="Inspector: browse photos with a map and their details"
+          aria-label="Inspector"
+          aria-pressed={inspectorOpen}>🖼</button
+        >
       </div>
       {#if mode === "bulk"}
         <label class="check"><input type="checkbox" bind:checked={includeSubfolders} /> Include subfolders</label>
@@ -916,17 +958,7 @@
             {:else}
               <div class="no-preview">No preview</div>
             {/if}
-            <dl>
-              <dt>GPS</dt>
-              <dd>{details.lat != null ? `${details.lat.toFixed(5)}, ${details.lon?.toFixed(5)}` : "none"}</dd>
-              <dt>Date taken</dt>
-              <dd>{details.date_taken ?? "none"}</dd>
-              {#each exifRows as [label, value] (label)}
-                <dt>{label}</dt>
-                <dd>{value}</dd>
-              {/each}
-            </dl>
-            {#if details.issue}<p class="warn">{details.issue}</p>{/if}
+            <ExifDetails {details} />
           </div>
         {/if}
       </div>
@@ -994,6 +1026,12 @@
           <button type="button" onclick={clearCache} disabled={sv.cache_entries === 0}>Clear cache</button>
         </div>
 
+        <label class="field-label" for="s-thumbs">Inspector thumbnails</label>
+        <div class="row" id="s-thumbs">
+          <span class="meta grow">{sv.cache_thumbnails} saved thumbnail{sv.cache_thumbnails === 1 ? "" : "s"}</span>
+          <button type="button" onclick={clearThumbnails} disabled={sv.cache_thumbnails === 0}>Clear</button>
+        </div>
+
         <label class="field-label" for="s-file">Settings file</label>
         <div class="row" id="s-file">
           <span class="meta grow path" title={sv.path}>{sv.path}</span>
@@ -1027,6 +1065,10 @@
         </div>
       </div>
     </div>
+  {/if}
+
+  {#if inspectorOpen}
+    <Inspector bind:this={inspector} start={inspectorStart} initialPhoto={mode === "single" ? filePath || null : null} onclose={closeInspector} />
   {/if}
 
   {#if dragging}
@@ -1519,6 +1561,14 @@
   .modes .check {
     margin-top: 0;
   }
+  .inspect {
+    flex: none;
+    padding: 6px 9px;
+  }
+  .inspect.on {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
   .drop-hint {
     position: fixed;
     inset: 0;
@@ -1589,24 +1639,6 @@
     place-items: center;
     font-size: 12px;
     color: var(--muted);
-  }
-  .exif-body dl {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 3px 10px;
-    margin: 10px 0 0;
-    font-size: 12px;
-  }
-  .exif-body dt {
-    color: var(--muted);
-  }
-  .exif-body dd {
-    margin: 0;
-    overflow-wrap: anywhere;
-  }
-  .exif-body .warn {
-    font-size: 12px;
-    margin: 8px 0 0;
   }
   :global(.pin.at-current) {
     background: #8a909c;

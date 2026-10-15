@@ -78,6 +78,11 @@ pub fn read_gps_state(path: &Path) -> (GpsState, bool, Option<String>) {
 /// Hidden files/folders are skipped and symbolic links are not followed.
 pub fn scan(root: &str, recursive: bool) -> Result<ScanResult, String> {
     let root_path = Path::new(root);
+    // A linked photo is never written: replacing it would turn the link into a plain copy
+    // and leave the original untouched. (Linked photos and folders inside a folder are skipped below.)
+    if root_path.is_symlink() && root_path.is_file() {
+        return Err(format!("{root} is a link to a photo. Open the original photo instead."));
+    }
     // Single-file mode: the "root" is one photo.
     if root_path.is_file() {
         if !is_supported(root_path) {
@@ -130,4 +135,42 @@ pub fn scan(root: &str, recursive: bool) -> Result<ScanResult, String> {
         files,
         folder_errors,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn photo() -> String {
+        concat!(env!("CARGO_MANIFEST_DIR"), "/test-data/exif-details.jpg").to_string()
+    }
+
+    #[test]
+    fn single_photo_is_scanned() {
+        let r = scan(&photo(), false).unwrap();
+        assert_eq!(r.photos, 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn linked_photos_and_folders_are_not_processed() {
+        let d = std::env::temp_dir().join(format!("bgt-scan-links-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(d.join("real")).unwrap();
+        fs::create_dir_all(d.join("outside")).unwrap();
+        fs::copy(photo(), d.join("real/a.jpg")).unwrap();
+        fs::copy(photo(), d.join("outside/b.jpg")).unwrap();
+        std::os::unix::fs::symlink(d.join("outside"), d.join("real/linked-folder")).unwrap();
+        std::os::unix::fs::symlink(d.join("outside/b.jpg"), d.join("real/linked.jpg")).unwrap();
+
+        // In a folder scan (even with subfolders), only the real photo counts.
+        let r = scan(d.join("real").to_str().unwrap(), true).unwrap();
+        assert_eq!(r.files.iter().map(|f| f.path.clone()).collect::<Vec<_>>(), [d.join("real/a.jpg").display().to_string()]);
+
+        // A linked photo on its own (single-file mode) is refused.
+        let e = scan(d.join("real/linked.jpg").to_str().unwrap(), false).unwrap_err();
+        assert!(e.contains("is a link"), "{e}");
+        fs::remove_dir_all(&d).ok();
+    }
 }
