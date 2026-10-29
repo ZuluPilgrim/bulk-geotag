@@ -3,6 +3,11 @@
 All notable changes to Bulk GeoTag. Dates are NZ local time.
 Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.5.2] - 2026-10-29
+
+### Fixed
+- Photos whose EXIF stores a version field (ExifVersion, FlashpixVersion) as text instead of raw bytes, as some apps such as WhatsApp do, were left unchanged with *cannot load existing metadata safely: … Unknown tag for combination UNDEF vs STRING*. The field is now relabelled with its value unchanged, and these photos tag normally.
+
 ## [1.5.1] - 2026-10-15
 
 ### Fixed

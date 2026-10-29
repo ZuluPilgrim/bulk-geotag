@@ -15,27 +15,36 @@ use little_exif::metadata::Metadata;
 /// Private tag numbers used while loading; no standard tag lives in this range.
 const PLACEHOLDER_BASE: u16 = 0xFE00;
 
-/// One badly typed entry: where it is, its placeholder number, and the corrected tag.
+/// One badly typed entry. Either retagged (a placeholder number while loading, then the corrected
+/// tag put back), or, when only the type label was wrong, fixed in place with nothing to restore.
 #[derive(Debug)]
 pub struct Repair {
     group: ExifTagGroup,
     ifd_nr: u32,
     placeholder: u16,
-    fixed: ExifTag,
+    /// None: fixed in place (e.g. ExifVersion labelled as text instead of raw bytes).
+    fixed: Option<ExifTag>,
+    #[allow(dead_code)]
+    tag: u16,
 }
 
 impl Repair {
     /// e.g. "XResolution" (used by the tests)
     #[cfg(test)]
     pub fn tag_name(&self) -> String {
-        let s = format!("{:?}", self.fixed);
-        s.split('(').next().unwrap_or(&s).to_string()
+        match &self.fixed {
+            Some(t) => {
+                let s = format!("{t:?}");
+                s.split('(').next().unwrap_or(&s).to_string()
+            }
+            None => format!("0x{:04x}", self.tag),
+        }
     }
 }
 
 /// True for the error little_exif gives when a known tag has the wrong type.
 pub fn is_bad_type_error(msg: &str) -> bool {
-    msg.contains("Illegal format for known tag")
+    msg.contains("Illegal format for known tag") || msg.contains("Unknown tag for combination")
 }
 
 /// Find the EXIF (TIFF) block `tiff` inside `file` and retag every badly typed entry
@@ -66,9 +75,10 @@ pub fn neutralise(file: &mut [u8], tiff: &[u8]) -> Vec<Repair> {
 /// After loading: remove the placeholders and set the corrected tags in the same IFDs.
 pub fn restore(md: &mut Metadata, repairs: Vec<Repair>) {
     for r in repairs {
+        let Some(fixed) = r.fixed else { continue }; // fixed in place
         let ifd = md.get_ifd_mut(r.group, r.ifd_nr);
         ifd.remove_tag(r.placeholder);
-        ifd.set_tag(r.fixed);
+        ifd.set_tag(fixed);
     }
 }
 
@@ -113,21 +123,32 @@ fn walk(
             continue;
         }
         let want = known.format();
-        if want.as_u16() == typ || tolerated(want.as_u16(), typ) {
+        if want.as_u16() == typ {
+            continue;
+        }
+        // Raw bytes stored with a "text" label (seen in ExifVersion, FlashpixVersion,
+        // ComponentsConfiguration from some apps, e.g. WhatsApp). Both are one byte per item,
+        // so relabelling the entry as raw bytes keeps the data exactly as it is.
+        if want.as_u16() == 7 && typ == 2 {
+            wr16(t, e + 2, 7, little);
+            repairs.push(Repair { group, ifd_nr, placeholder: 0, fixed: None, tag });
+            continue;
+        }
+        if tolerated(want.as_u16(), typ) {
             continue;
         }
         let Some(values) = read_ints(t, e, typ, n, little) else { continue };
         let Some(fixed) = convert(tag, &want, &values, &group) else { continue };
-        let placeholder = PLACEHOLDER_BASE + repairs.len() as u16;
+        let placeholder = PLACEHOLDER_BASE + repairs.iter().filter(|r| r.fixed.is_some()).count() as u16;
         wr16(t, e, placeholder, little);
-        repairs.push(Repair { group, ifd_nr, placeholder, fixed });
+        repairs.push(Repair { group, ifd_nr, placeholder, fixed: Some(fixed), tag });
     }
     rd32(t, off + 2 + count * 12, little).map(|o| o as usize)
 }
 
 /// Type mismatches little_exif already converts by itself (see its decode.rs).
 fn tolerated(want: u16, got: u16) -> bool {
-    matches!((want, got), (4, 3) | (4, 1) | (3, 1) | (3, 4) | (1, 3) | (1, 2) | (10, 5) | (7, 2))
+    matches!((want, got), (4, 3) | (4, 1) | (3, 1) | (3, 4) | (1, 3) | (1, 2) | (10, 5))
 }
 
 /// The entry's values, if it is a whole-number type (byte/short/long, signed or not).
@@ -245,8 +266,27 @@ mod tests {
     }
 
     #[test]
+    fn version_stored_as_text_is_relabelled_in_place() {
+        // ExifVersion (0x9000) in the EXIF sub-IFD, stored as ASCII "0220" instead of UNDEFINED.
+        let mut t = b"MM\0*\0\0\0\x08".to_vec();
+        t.extend([0, 1]);
+        t.extend([0x87, 0x69, 0, 4, 0, 0, 0, 1, 0, 0, 0, 26]); // ExifIFD pointer → offset 26
+        t.extend([0, 0, 0, 0]);
+        t.extend([0, 1]);
+        t.extend([0x90, 0x00, 0, 2, 0, 0, 0, 4, b'0', b'2', b'2', b'0']); // ExifVersion, ASCII, 4
+        t.extend([0, 0, 0, 0]);
+        let mut file = t.clone();
+        let repairs = neutralise(&mut file, &t);
+        assert_eq!(repairs.len(), 1);
+        assert!(repairs[0].fixed.is_none());
+        assert_eq!(&file[30..32], &[0, 7]); // now UNDEFINED
+        assert_eq!(&file[36..40], b"0220"); // value untouched
+    }
+
+    #[test]
     fn only_the_error_we_handle_is_recognised() {
         assert!(is_bad_type_error("Illegal format for known tag! Tag: XResolution([]) Expected: RATIONAL64U Got: INT32S"));
+        assert!(is_bad_type_error("Unknown tag for combination UNDEF vs STRING while decoding: ExifVersion([])"));
         assert!(!is_bad_type_error("No EXIF data found"));
     }
 }

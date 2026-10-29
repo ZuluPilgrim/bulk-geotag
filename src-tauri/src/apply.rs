@@ -486,6 +486,25 @@ pub fn tag_photo(path: &Path, changes: Changes, keep_dates: bool) -> Result<(), 
 mod tests {
     use super::*;
 
+    /// Some apps (e.g. WhatsApp) store ExifVersion as text instead of raw bytes; little_exif
+    /// refused to load those ("Unknown tag for combination UNDEF vs STRING").
+    #[test]
+    fn tags_photo_with_exifversion_stored_as_text() {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("test-data/exifversion-as-text.jpg");
+        let dir = std::env::temp_dir().join(format!("bgt-exifver-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let photo = dir.join("IMG-20230524-WA0000.jpeg");
+        fs::copy(&src, &photo).unwrap();
+
+        tag_photo(&photo, Changes { gps: Some((-36.6, 174.8)), date: None }, true).unwrap();
+
+        let after = read_exif(&photo).unwrap().unwrap();
+        let v = after.get_field(exif::Tag::ExifVersion, exif::In::PRIMARY).unwrap();
+        assert!(matches!(&v.value, exif::Value::Undefined(b, _) if b.as_slice() == b"0220"));
+        assert!(read_coord(&after, exif::Tag::GPSLatitude, exif::Tag::GPSLatitudeRef).is_some());
+        fs::remove_dir_all(&dir).ok();
+    }
+
     /// Old cameras (here a Zoran-based one) pad Make/Model with NULs to 32 bytes. The rewrite
     /// drops the padding; that must not count as "camera data would have changed".
     #[test]
